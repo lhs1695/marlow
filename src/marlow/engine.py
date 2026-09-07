@@ -32,14 +32,14 @@ from marlow.codes import (
     RUN_RUNNING,
     RUN_WAITING_APPROVAL,
     RUN_WAITING_TOOL,
-    SKILL_ENTITLEMENT_CHANGE,
+    SKILL_VERSION,
     STATUS_RESOLVED,
-    UNAUTHORIZED,
 )
 from marlow.fake import ActionProvider, provider_for_case
 from marlow.faults import FaultHooks
 from marlow.models import AgentSession, MemoryNote, Run, RunEvent, Ticket, TicketComment
 from marlow.observation import Observation
+from marlow.skills import apply_skill, match_skill
 from marlow.tools import TOOL_APPLY_ENTITLEMENT_CHANGE, TOOL_GET_ASSET, execute_tool
 
 TICKET_ID_RE = re.compile(r"\b(INC-\d+|CHG-\d+)\b", re.IGNORECASE)
@@ -161,22 +161,67 @@ def start_run(
             return run
 
         if action.kind == ACTION_SKILL:
-            if action.name == SKILL_ENTITLEMENT_CHANGE:
+            spec = match_skill(action.name, str(action.arguments.get("skill_version") or SKILL_VERSION))
+            _emit(
+                session,
+                run,
+                "skill",
+                name=action.name,
+                version=None if spec is None else spec.version,
+                matched=spec is not None,
+            )
+
+            def run_tool(tool_action: Action) -> Observation:
+                obs = _call_tool(session, run, actor_id, tool_action, hooks)
+                if obs.ok:
+                    _merge_verified(verified, tool_action.name or "", obs)
+                return obs
+
+            skill_result = apply_skill(
+                session,
+                actor_id=actor_id,
+                name=action.name,
+                arguments=action.arguments,
+                ticket_id=ticket_id,
+                run_tool=run_tool,
+            )
+            verified.update(skill_result.verified_updates)
+            if skill_result.answer:
+                verified["skill_answer"] = skill_result.answer
+            if skill_result.notes_untrusted:
+                _emit(
+                    session,
+                    run,
+                    "memory",
+                    untrusted=True,
+                    notes=skill_result.notes_untrusted,
+                )
+            if skill_result.hitl:
                 _set_status(session, run, RUN_WAITING_APPROVAL)
-                _emit(session, run, "hitl", code=APPROVAL_REQUIRED, draft=action.arguments)
+                _emit(session, run, "hitl", code=APPROVAL_REQUIRED, draft=skill_result.draft)
                 _finish(
                     session,
                     run,
                     agent_session,
                     RUN_COMPLETED,
-                    APPROVAL_REQUIRED,
-                    HITL_ANSWER,
+                    skill_result.code,
+                    skill_result.answer or HITL_ANSWER,
                     verified,
                 )
                 return run
-            text = _answer_from_verified(verified)
-            _finish(session, run, agent_session, RUN_COMPLETED, "ok", text, verified)
-            return run
+            if skill_result.finish:
+                text = skill_result.answer or _answer_from_verified(verified)
+                _finish(
+                    session,
+                    run,
+                    agent_session,
+                    RUN_COMPLETED,
+                    skill_result.code,
+                    text,
+                    verified,
+                )
+                return run
+            continue
 
         if action.kind != ACTION_TOOL or not action.name:
             _finish(session, run, agent_session, RUN_FAILED, "non_retryable", "未知 Action。", verified)
@@ -255,6 +300,8 @@ def _merge_verified(verified: dict[str, Any], tool_name: str, obs: Observation) 
 
 
 def _answer_from_verified(verified: dict[str, Any]) -> str:
+    if verified.get("skill_answer"):
+        return str(verified["skill_answer"])
     parts = ["已用已验证上下文作答。"]
     if verified.get("ticket_id"):
         parts.append(f"ticket_id={verified['ticket_id']}")

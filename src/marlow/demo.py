@@ -23,7 +23,7 @@ from marlow.seed import ADMIN_ID, L1_ID
 
 DEMO_CASES: dict[int, dict[str, str]] = {
     1: {"case_id": "clarify", "text": "Grafana 登录有问题，帮我看看"},
-    2: {"case_id": "investigate", "text": "请调查 INC-1001"},
+    2: {"case_id": "close_success", "text": "请调查 INC-1001 并关单"},
     3: {"case_id": "timeout", "text": "读取 INC-1005 的资产配置"},
     4: {"case_id": "change_hitl", "text": "工单 CHG-2004 申请给 emp-007 加 Grafana Editor"},
     5: {"case_id": "l1_deny", "text": "在 CHG-2004 上直接改权限"},

@@ -6,7 +6,15 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from marlow.actions import Action, answer, skill, tool
-from marlow.codes import DECISION_APPROVE, PERM_EDITOR, SKILL_ENTITLEMENT_CHANGE, SYSTEM_GRAFANA
+from marlow.codes import (
+    DECISION_APPROVE,
+    PERM_EDITOR,
+    SKILL_CLOSE,
+    SKILL_ENTITLEMENT_CHANGE,
+    SKILL_INVESTIGATE,
+    SKILL_KB_QA,
+    SYSTEM_GRAFANA,
+)
 
 
 class ActionProvider(Protocol):
@@ -43,8 +51,37 @@ def provider_for_case(case_id: str) -> ActionProvider:
         return LoopToolProvider("get_ticket", {"ticket_id": "INC-1008"})
     scripts: dict[str, list[Action]] = {
         "investigate": [
-            tool("get_ticket", ticket_id="INC-1001"),
-            tool("search_kb", query="grafana login"),
+            skill(SKILL_INVESTIGATE, ticket_id="INC-1001"),
+            answer(),
+        ],
+        "close_success": [
+            skill(SKILL_INVESTIGATE, ticket_id="INC-1001"),
+            skill(
+                SKILL_CLOSE,
+                ticket_id="INC-1001",
+                kb_doc_id="grafana-login",
+                kb_version="10.4",
+                reason="登录问题已按手册处理。",
+            ),
+        ],
+        "close_missing_cite": [
+            skill(SKILL_INVESTIGATE, ticket_id="INC-1001"),
+            skill(SKILL_CLOSE, ticket_id="INC-1001", reason="先关了吧"),
+        ],
+        "close_version_mismatch": [
+            skill(
+                SKILL_CLOSE,
+                ticket_id="INC-1004",
+                kb_doc_id="grafana-roles",
+                kb_version="8.0",
+                reason="按旧版手册关单。",
+            ),
+        ],
+        "kb_qa_miss": [
+            skill(SKILL_KB_QA, query="coffee machine error E7"),
+        ],
+        "investigate_followup": [
+            skill(SKILL_INVESTIGATE, ticket_id="INC-1005"),
             answer(),
         ],
         "timeout": [
