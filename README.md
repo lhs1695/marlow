@@ -25,4 +25,4 @@ pytest
 
 ## 阶段
 
-当前：**阶段 0** — 仓宪法与空壳（`uv sync` + 占位 `pytest`）。
+当前：**阶段 1** — 业务库 + 种子 + 审批网关（无模型）。写 entitlements 只走 `apply_entitlement_change`。

@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "IT ticket agent PoC — personal project with simulated data"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "sqlalchemy>=2.0",
+]
 
 [dependency-groups]
 dev = [
