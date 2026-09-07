@@ -11,7 +11,16 @@ uv sync
 pytest
 ```
 
-无 API Key 时后续阶段用 Fake Provider 跑通评测；密钥放本地 `.env`（不进 git）。
+无 API Key 时用 Fake Provider 跑通评测；密钥放本地 `.env`（不进 git）。
+
+手册钉 **Grafana 10.4**（文档取自 git tag `v10.4.3`，获取日期 **2026-09-07**），原文在 `handbook/grafana-10.4/`。CI / 默认 `search_kb` 对切片做固定检索夹具，**不打**真实 Embedding。本地可选建 Chroma 目录（gitignored）：
+
+```bash
+uv run python -m marlow.kb --persist chroma
+# 真 Embedding（需 OPENAI_API_KEY，可设 OPENAI_BASE_URL）：
+uv sync --extra embeddings
+uv run python -m marlow.kb --persist chroma --real
+```
 
 ## 规格
 
@@ -25,7 +34,7 @@ pytest
 
 ## 阶段
 
-当前：**阶段 3** — 自写 Run 状态机 + Fake Action（无真模型）。写 entitlements 仍只走审批网关。
+当前：**阶段 5** — 手册切片 + 引用校验；写 entitlements 仍只走审批网关。CI 默认 Fake、无真实 Embedding。
 
 ```bash
 python -m marlow.demo --case 1
