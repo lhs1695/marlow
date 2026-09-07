@@ -1,0 +1,25 @@
+# Virtual environments
+.venv/
+
+# Secrets
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[oc]
+.pytest_cache/
+build/
+dist/
+wheels/
+*.egg-info
+
+# SQLite runtime databases
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Chroma persistence
+chroma/
+.chroma/
