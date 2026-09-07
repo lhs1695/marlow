@@ -112,3 +112,59 @@ class AuditEvent(Base):
     outcome: Mapped[str] = mapped_column(String(32), nullable=False)
     detail: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AgentSession(Base):
+    __tablename__ = "sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    actor_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    runs: Mapped[list[Run]] = relationship(back_populates="agent_session")
+
+
+class Run(Base):
+    __tablename__ = "runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id"), nullable=False)
+    request_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    case_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_text: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    ticket_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    step_count: Mapped[int] = mapped_column(default=0)
+    token_used: Mapped[int] = mapped_column(default=0)
+    cost_cents: Mapped[int] = mapped_column(default=0)
+    outcome_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    final_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    agent_session: Mapped[AgentSession] = relationship(back_populates="runs")
+    events: Mapped[list[RunEvent]] = relationship(back_populates="run")
+
+
+class RunEvent(Base):
+    __tablename__ = "run_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    run: Mapped[Run] = relationship(back_populates="events")
+
+
+class MemoryNote(Base):
+    __tablename__ = "memory_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    requester_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    asset_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

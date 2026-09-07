@@ -25,6 +25,10 @@ pytest
 
 ## 阶段
 
-当前：**阶段 2** — 六个工单工具的领域实现 + MCP 薄壳（无模型选工具）。写 entitlements 仍只走审批网关。
+当前：**阶段 3** — 自写 Run 状态机 + Fake Action（无真模型）。写 entitlements 仍只走审批网关。
+
+```bash
+python -m marlow.demo --case 1
+```
 
 Inspector / stdio（可选）：`python -m marlow.ticket_mcp`

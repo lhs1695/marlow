@@ -102,6 +102,9 @@ def list_tool_schemas(server: MCPServer | None = None) -> list[dict[str, object]
 
 
 def main() -> None:
+    from marlow.stdio import ensure_utf8_stdio
+
+    ensure_utf8_stdio()
     build_ticket_mcp().run(transport="stdio")
 
 
