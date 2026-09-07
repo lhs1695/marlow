@@ -25,4 +25,6 @@ pytest
 
 ## 阶段
 
-当前：**阶段 1** — 业务库 + 种子 + 审批网关（无模型）。写 entitlements 只走 `apply_entitlement_change`。
+当前：**阶段 2** — 六个工单工具的领域实现 + MCP 薄壳（无模型选工具）。写 entitlements 仍只走审批网关。
+
+Inspector / stdio（可选）：`python -m marlow.ticket_mcp`

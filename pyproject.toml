@@ -5,6 +5,7 @@ description = "IT ticket agent PoC — personal project with simulated data"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "mcp>=2.1.1",
     "sqlalchemy>=2.0",
 ]
 
