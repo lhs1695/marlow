@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}Marlow{% endblock %}</title>
+  <style>
+    body { font-family: sans-serif; margin: 1.5rem; max-width: 52rem; }
+    nav a { margin-right: 1rem; }
+    .muted { color: #555; }
+    .box { border: 1px solid #ccc; padding: 0.75rem; margin: 0.75rem 0; }
+    button, input, textarea { font: inherit; }
+    textarea { width: 100%; min-height: 3rem; }
+    .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <nav>
+    <strong>Marlow</strong>
+    <a href="/tickets">工单列表</a>
+    {% if actor and actor.role == 'admin' %}
+    <a href="/approvals">审批队列</a>
+    {% endif %}
+    <form method="post" action="/logout" style="display:inline">
+      <button type="submit">退出</button>
+    </form>
+  </nav>
+  <p>
+    会话角色：<span data-testid="role">{{ actor.role }}</span>
+    <span class="muted" data-testid="page-claim">页面声称：{{ page_claim }}</span>
+  </p>
+  {% block body %}{% endblock %}
+  <section class="box" id="chat">
+    <h2>对话</h2>
+    <form method="post" action="/chat" class="row">
+      <input type="hidden" name="next" value="{{ request.url.path }}">
+      <textarea name="text" data-testid="chat-input" placeholder="用自然语言调查或关单，请带工单号"></textarea>
+      <input type="hidden" name="case_id" value="">
+      <button type="submit" data-testid="chat-submit">发送</button>
+    </form>
+    {% if chat_clarify %}
+    <p data-testid="chat-clarify">{{ chat_clarify }}</p>
+    {% endif %}
+    {% if chat_deny %}
+    <p data-testid="chat-deny">{{ chat_deny }}</p>
+    {% endif %}
+    {% if chat_answer %}
+    <pre data-testid="chat-stream">{{ chat_answer }}</pre>
+    {% endif %}
+  </section>
+</body>
+</html>

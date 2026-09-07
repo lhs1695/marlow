@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}工单列表 — Marlow{% endblock %}
+{% block body %}
+<h1>工单列表</h1>
+<p class="muted">按会话角色过滤队列。L1 只见 it-l1。</p>
+<ul data-testid="ticket-list">
+  {% for t in tickets %}
+  <li data-testid="ticket-row-{{ t.id }}">
+    <a href="/tickets/{{ t.id }}">{{ t.id }}</a>
+    {{ t.title }} · {{ t.status }} · {{ t.queue }}
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

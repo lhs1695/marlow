@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.id }} — Marlow{% endblock %}
+{% block body %}
+<h1>工单详情</h1>
+<p>单号：<span data-testid="ticket-id">{{ ticket.id }}</span></p>
+<p>状态：<span data-testid="ticket-status">{{ ticket.status }}</span></p>
+<p>队列：{{ ticket.queue }}</p>
+<p data-testid="ticket-citation">引用：{% if ticket.kb_doc_id %}{{ ticket.kb_doc_id }}@{{ ticket.kb_version }}{% else %}无{% endif %}</p>
+{% if permission %}
+<p>当前权限：<span data-testid="entitlement-permission">{{ permission }}</span></p>
+{% endif %}
+{% if ticket.status == 'Rejected' %}
+<p data-testid="reject-notice">审批已拒绝，权限未变更。</p>
+{% endif %}
+
+<section class="box">
+  <h2>评论</h2>
+  <ul data-testid="ticket-comments">
+    {% for c in comments %}
+    <li>{{ c.author_id }}：{{ c.body }}</li>
+    {% endfor %}
+  </ul>
+  <form method="post" action="/tickets/{{ ticket.id }}/comments">
+    <textarea name="body" data-testid="comment-input" placeholder="添加评论"></textarea>
+    <button type="submit" data-testid="comment-submit">发表评论</button>
+  </form>
+</section>
+
+<section class="box">
+  <h2>审计</h2>
+  <ul data-testid="audit-block">
+    {% for ev in audits %}
+    <li>{{ ev.actor_role }} {{ ev.action }} {{ ev.outcome }} {{ ev.detail }}</li>
+    {% else %}
+    <li class="muted">暂无审计事件</li>
+    {% endfor %}
+  </ul>
+</section>
+
+{% if actor.role == 'admin' and ticket.queue == 'it-change' %}
+<section class="box">
+  <h2>审批</h2>
+  <form method="post" action="/approvals" class="row">
+    <input type="hidden" name="ticket_id" value="{{ ticket.id }}">
+    <input type="hidden" name="target_employee_id" value="{{ ticket.requester_id }}">
+    <button type="submit" name="decision" value="approve" data-testid="approval-approve">批准</button>
+    <button type="submit" name="decision" value="reject" data-testid="approval-reject">拒绝</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

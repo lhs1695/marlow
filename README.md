@@ -34,7 +34,9 @@ uv run python -m marlow.kb --persist chroma --real
 
 ## 阶段
 
-当前：**阶段 6** — FastAPI Session 鉴权 + Run API + SSE；写 entitlements 仍只走审批网关。无 Key 默认 Fake。
+当前：**阶段 7** — 四页中文 Web + L1 对话条；写 entitlements 仍只走审批网关。无 Key 默认 Fake。
+
+打开 `http://127.0.0.1:8000/` 选 L1 或管理员。工单列表 / 详情 / 审批队列；详情含只读审计。登录后底部对话条可澄清 / 调查。`data-testid` 见 `src/marlow/web/testids.py`。
 
 演示账号（角色只来自服务端 Session，忽略 `?role=`）：
 

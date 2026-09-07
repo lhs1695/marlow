@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>登录 — Marlow</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; max-width: 32rem; }
+    form { margin: 1rem 0; }
+    button { font: inherit; margin-right: 0.5rem; padding: 0.4rem 0.8rem; }
+  </style>
+</head>
+<body>
+  <h1>Marlow 演示登录</h1>
+  <p>选择演示账号。角色只来自服务端 Session，不能用查询参数覆盖。</p>
+  <form method="post" action="/login">
+    <input type="hidden" name="account" value="l1">
+    <input type="hidden" name="password" value="l1-demo">
+    <button type="submit" data-testid="login-l1">以 L1 登录</button>
+  </form>
+  <form method="post" action="/login">
+    <input type="hidden" name="account" value="admin">
+    <input type="hidden" name="password" value="admin-demo">
+    <button type="submit" data-testid="login-admin">以管理员登录</button>
+  </form>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}审批队列 — Marlow{% endblock %}
+{% block body %}
+<h1>管理员审批队列</h1>
+<ul data-testid="approval-queue">
+  {% for t in tickets %}
+  <li data-testid="approval-item" data-ticket-id="{{ t.id }}">
+    <a href="/tickets/{{ t.id }}">{{ t.id }}</a>
+    {{ t.title }} · {{ t.status }}
+    <form method="post" action="/approvals" style="display:inline">
+      <input type="hidden" name="ticket_id" value="{{ t.id }}">
+      <input type="hidden" name="target_employee_id" value="{{ t.requester_id }}">
+      <button type="submit" name="decision" value="approve" data-testid="approval-approve">批准</button>
+      <button type="submit" name="decision" value="reject" data-testid="approval-reject">拒绝</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

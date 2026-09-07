@@ -6,14 +6,14 @@ import json
 import os
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
 from marlow.codes import (
@@ -29,6 +29,7 @@ from marlow.gateway import apply_entitlement_change
 from marlow.models import Employee, Run, RunEvent
 from marlow.tools.tickets import get_ticket
 from marlow.web.auth import SESSION_ACTOR_KEY, actor_from_session, login_actor_id
+from marlow.web.deps import Db, enforce_limit
 from marlow.web.limits import MAX_INPUT_CHARS, MemoryRateLimiter
 
 SESSION_SECRET_ENV = "MARLOW_SESSION_SECRET"
@@ -68,22 +69,6 @@ def _ensure_sqlite_dir(url: str) -> None:
         parent.mkdir(parents=True, exist_ok=True)
 
 
-def get_db(request: Request) -> Iterator[Session]:
-    factory: sessionmaker[Session] = request.app.state.session_factory
-    db = factory()
-    try:
-        yield db
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
-
-
-Db = Annotated[Session, Depends(get_db)]
-
-
 def create_app(
     engine: Engine | None = None,
     *,
@@ -103,39 +88,45 @@ def create_app(
     app.state.session_factory = factory
     app.state.limiter = limiter or MemoryRateLimiter()
 
-    def _rate_key(request: Request, suffix: str) -> str:
-        actor = request.session.get(SESSION_ACTOR_KEY)
-        if not actor:
-            actor = request.client.host if request.client else "anon"
-        return f"{actor}:{suffix}"
+    from marlow.web.pages import register_pages
 
-    def _enforce_limit(request: Request, suffix: str) -> None:
-        limiter_obj: MemoryRateLimiter = request.app.state.limiter
-        if not limiter_obj.allow(_rate_key(request, suffix)):
-            raise HTTPException(status_code=429, detail="rate_limited")
+    register_pages(app)
 
     @app.post("/login")
-    def login(body: LoginBody, request: Request, db: Db) -> dict[str, str]:
-        _enforce_limit(request, "login")
-        actor_id = login_actor_id(body.account, body.password)
+    async def login(request: Request, db: Db) -> Any:
+        enforce_limit(request, "login")
+        ctype = request.headers.get("content-type", "")
+        if "application/json" in ctype:
+            payload = LoginBody.model_validate(await request.json())
+            html = False
+        else:
+            form = await request.form()
+            payload = LoginBody(
+                account=str(form.get("account") or ""),
+                password=str(form.get("password") or ""),
+            )
+            html = True
+        actor_id = login_actor_id(payload.account, payload.password)
         employee = db.get(Employee, actor_id)
         if employee is None:
             raise HTTPException(status_code=401, detail="unauthorized")
         request.session[SESSION_ACTOR_KEY] = actor_id
+        if html:
+            return RedirectResponse("/tickets", status_code=303)
         return {"actor_id": employee.id, "role": employee.role}
 
     @app.post("/logout")
-    def logout(request: Request) -> dict[str, str]:
+    def logout(request: Request) -> RedirectResponse:
         request.session.clear()
-        return {"ok": "ok"}
+        return RedirectResponse("/", status_code=303)
 
     @app.get("/me")
     def me(request: Request, db: Db) -> dict[str, str]:
         actor = actor_from_session(request, db)
         return {"actor_id": actor.id, "role": actor.role}
 
-    @app.get("/tickets/{ticket_id}")
-    def ticket_detail(ticket_id: str, request: Request, db: Db) -> dict[str, Any]:
+    @app.get("/api/tickets/{ticket_id}")
+    def ticket_detail_api(ticket_id: str, request: Request, db: Db) -> dict[str, Any]:
         actor = actor_from_session(request, db)
         obs = get_ticket(db, actor_id=actor.id, ticket_id=ticket_id)
         if not obs.ok:
@@ -149,7 +140,7 @@ def create_app(
     @app.post("/api/runs")
     def create_run(body: CreateRunBody, request: Request, db: Db) -> dict[str, Any]:
         actor = actor_from_session(request, db)
-        _enforce_limit(request, "runs")
+        enforce_limit(request, "runs")
         text = body.text
         if len(text) > MAX_INPUT_CHARS:
             raise HTTPException(status_code=400, detail="input_too_long")
