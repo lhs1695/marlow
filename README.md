@@ -34,10 +34,16 @@ uv run python -m marlow.kb --persist chroma --real
 
 ## 阶段
 
-当前：**阶段 5** — 手册切片 + 引用校验；写 entitlements 仍只走审批网关。CI 默认 Fake、无真实 Embedding。
+当前：**阶段 6** — FastAPI Session 鉴权 + Run API + SSE；写 entitlements 仍只走审批网关。无 Key 默认 Fake。
+
+演示账号（角色只来自服务端 Session，忽略 `?role=`）：
+
+- L1：`l1` / `l1-demo`
+- 管理员：`admin` / `admin-demo`
 
 ```bash
 python -m marlow.demo --case 1
+python -m marlow.web
 ```
 
 Inspector / stdio（可选）：`python -m marlow.ticket_mcp`

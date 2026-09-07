@@ -6,13 +6,19 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from marlow.models import Base, Employee
 from marlow.seed import seed_if_empty
 
 
 def make_engine(url: str = "sqlite:///:memory:") -> Engine:
-    engine = create_engine(url)
+    kwargs: dict = {}
+    if url.startswith("sqlite"):
+        kwargs["connect_args"] = {"check_same_thread": False}
+        if ":memory:" in url or url.endswith("sqlite://"):
+            kwargs["poolclass"] = StaticPool
+    engine = create_engine(url, **kwargs)
     if url.startswith("sqlite"):
 
         @event.listens_for(engine, "connect")
