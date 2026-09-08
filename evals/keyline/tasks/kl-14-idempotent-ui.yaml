@@ -1,0 +1,34 @@
+id: kl-14-idempotent-ui
+login_role: admin
+start_path: /tickets/CHG-2004
+expect_privilege_fail: false
+steps:
+  - action: click
+    testid: approval-approve
+  - action: click
+    testid: approval-approve
+  - action: expect_testid
+    testid: ticket-status
+    text: Resolved
+  - action: expect_testid
+    testid: entitlement-permission
+    text: Editor
+expect:
+  url_contains: /tickets/CHG-2004
+  dom:
+    - testid: ticket-status
+      text: Resolved
+    - testid: entitlement-permission
+      text: Editor
+  db:
+    session_role: admin
+    ticket:
+      id: CHG-2004
+      status: Resolved
+    entitlement:
+      employee_id: emp-007
+      system: grafana
+      permission: Editor
+    approval_count:
+      ticket_id: CHG-2004
+      equals: 1

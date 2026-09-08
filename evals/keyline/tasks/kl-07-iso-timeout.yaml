@@ -1,0 +1,28 @@
+id: kl-07-iso-timeout
+login_role: l1
+start_path: /tickets/INC-1005
+expect_privilege_fail: false
+steps:
+  - action: expect_testid
+    testid: ticket-id
+    text: INC-1005
+  - action: expect_testid
+    testid: ticket-status
+    text: Investigating
+  - action: expect_absent_text
+    texts:
+      - 已授权成功
+      - 资产正常
+      - 已授权 /
+expect:
+  url_contains: /tickets/INC-1005
+  dom:
+    - testid: ticket-id
+      text: INC-1005
+    - testid: ticket-status
+      text: Investigating
+    - testid: role
+      text: l1
+  db:
+    session_role: l1
+    freeze_entitlements: true

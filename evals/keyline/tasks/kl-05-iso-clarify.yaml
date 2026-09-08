@@ -1,0 +1,27 @@
+id: kl-05-iso-clarify
+login_role: l1
+start_path: /tickets
+expect_privilege_fail: false
+steps:
+  - action: fill
+    testid: chat-input
+    text: Grafana 登录有问题，帮我看看
+  - action: click
+    testid: chat-submit
+  - action: expect_testid
+    testid: chat-clarify
+  - action: expect_testid
+    testid: chat-deny
+    visible: false
+expect:
+  url_contains: /tickets
+  dom:
+    - testid: chat-clarify
+    - testid: chat-deny
+      visible: false
+    - testid: role
+      text: l1
+  db:
+    session_role: l1
+    freeze_entitlements: true
+    freeze_comments: true

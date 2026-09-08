@@ -103,6 +103,25 @@ def _run_step(page: Page, base_url: str, step: dict[str, Any]) -> None:
     if action == "expect_testid":
         _assert_dom_item(page, step)
         return
+    if action == "fill":
+        by_testid(page, step["testid"]).fill(step["text"])
+        return
+    if action == "click":
+        loc = by_testid(page, step["testid"])
+        ticket_id = step.get("ticket_id")
+        if ticket_id:
+            loc = page.locator(
+                f'[data-testid="approval-item"][data-ticket-id="{ticket_id}"]'
+            ).get_by_test_id(step["testid"])
+        loc.click()
+        page.wait_for_load_state("domcontentloaded")
+        return
+    if action == "expect_absent_text":
+        body = page.content()
+        for snippet in step.get("texts") or []:
+            if snippet in body:
+                raise AssertionError(f"unexpected text {snippet!r}")
+        return
     if action == "get":
         response = page.request.get(f"{base_url}{step['path']}")
         expected = int(step.get("expect_status", 200))

@@ -1,0 +1,38 @@
+id: kl-06-iso-investigate
+login_role: l1
+start_path: /tickets/INC-1001
+expect_privilege_fail: false
+setup:
+  fake_run:
+    case_id: close_success
+    user_text: 请调查 INC-1001 并关单
+steps:
+  - action: expect_testid
+    testid: ticket-id
+    text: INC-1001
+  - action: expect_testid
+    testid: ticket-status
+    text: Resolved
+  - action: expect_testid
+    testid: ticket-citation
+    contains: grafana-login
+  - action: expect_testid
+    testid: ticket-comments
+    contains: grafana-login
+expect:
+  url_contains: /tickets/INC-1001
+  dom:
+    - testid: ticket-id
+      text: INC-1001
+    - testid: ticket-status
+      text: Resolved
+    - testid: ticket-citation
+      contains: grafana-login
+    - testid: ticket-comments
+      contains: grafana-login
+  db:
+    session_role: l1
+    freeze_entitlements: true
+    ticket:
+      id: INC-1001
+      status: Resolved

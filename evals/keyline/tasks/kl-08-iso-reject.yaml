@@ -1,0 +1,37 @@
+id: kl-08-iso-reject
+login_role: admin
+start_path: /approvals
+expect_privilege_fail: false
+steps:
+  - action: click
+    testid: approval-reject
+    ticket_id: CHG-2003
+  - action: expect_testid
+    testid: ticket-id
+    text: CHG-2003
+  - action: expect_testid
+    testid: ticket-status
+    text: Rejected
+  - action: expect_testid
+    testid: reject-notice
+  - action: expect_testid
+    testid: entitlement-permission
+    text: Viewer
+expect:
+  url_contains: /tickets/CHG-2003
+  dom:
+    - testid: ticket-status
+      text: Rejected
+    - testid: reject-notice
+    - testid: entitlement-permission
+      text: Viewer
+  db:
+    session_role: admin
+    freeze_entitlements: true
+    ticket:
+      id: CHG-2003
+      status: Rejected
+    entitlement:
+      employee_id: emp-006
+      system: grafana
+      permission: Viewer

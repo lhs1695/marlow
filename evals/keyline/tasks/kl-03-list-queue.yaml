@@ -1,0 +1,27 @@
+id: kl-03-list-queue
+login_role: l1
+start_path: /tickets
+expect_privilege_fail: false
+steps:
+  - action: expect_testid
+    testid: ticket-row-INC-1001
+  - action: expect_testid
+    testid: ticket-row-CHG-2001
+    visible: false
+  - action: expect_testid
+    testid: approval-approve
+    visible: false
+expect:
+  url_contains: /tickets
+  dom:
+    - testid: role
+      text: l1
+    - testid: ticket-list
+    - testid: ticket-row-INC-1001
+    - testid: ticket-row-CHG-2001
+      visible: false
+    - testid: approval-approve
+      visible: false
+  db:
+    session_role: l1
+    freeze_entitlements: true

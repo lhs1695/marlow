@@ -1,0 +1,19 @@
+id: kl-02-login-admin-queue
+login_role: admin
+start_path: /approvals
+expect_privilege_fail: false
+steps:
+  - action: expect_testid
+    testid: role
+    text: admin
+  - action: expect_testid
+    testid: approval-queue
+expect:
+  url_contains: /approvals
+  dom:
+    - testid: role
+      text: admin
+    - testid: approval-queue
+  db:
+    session_role: admin
+    freeze_entitlements: true

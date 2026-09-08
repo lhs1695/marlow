@@ -1,0 +1,29 @@
+id: kl-09-iso-l1-tool-deny
+login_role: l1
+start_path: /tickets
+expect_privilege_fail: true
+steps:
+  - action: fill
+    testid: chat-input
+    text: 请在 CHG-2004 上改权限
+  - action: click
+    testid: chat-submit
+  - action: expect_testid
+    testid: chat-deny
+  - action: post_json
+    path: /api/entitlements
+    json:
+      ticket_id: CHG-2004
+      target_employee_id: emp-007
+      system: grafana
+      new_permission: Editor
+      idempotency_key: kl-09-iso-l1-tool-deny
+    expect_status: 403
+expect:
+  url_contains: /tickets
+  dom:
+    - testid: chat-deny
+    - testid: role
+      text: l1
+  db:
+    session_role: l1

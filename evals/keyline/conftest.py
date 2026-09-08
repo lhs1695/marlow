@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from marlow.db import make_engine, prepare_database
@@ -37,7 +36,7 @@ def session() -> Iterator[Session]:
         yield db
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def live_app() -> Iterator[dict[str, Any]]:
     import uvicorn
 
@@ -60,11 +59,6 @@ def live_app() -> Iterator[dict[str, Any]]:
 
 
 @pytest.fixture(scope="module")
-def live_engine(live_app: dict[str, Any]) -> Engine:
-    return live_app["engine"]
-
-
-@pytest.fixture(scope="module")
 def chromium_browser() -> Iterator[Any]:
     pytest.importorskip("playwright")
     from playwright.sync_api import sync_playwright
@@ -81,3 +75,10 @@ def page(chromium_browser: Any) -> Iterator[Any]:
     page = context.new_page()
     yield page
     context.close()
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    from keyline.runner import TASK_REPORT, write_last_run
+
+    if TASK_REPORT:
+        write_last_run()

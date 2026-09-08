@@ -1,0 +1,19 @@
+id: kl-01-login-l1
+login_role: l1
+start_path: /tickets
+expect_privilege_fail: false
+steps:
+  - action: expect_testid
+    testid: role
+    text: l1
+  - action: expect_testid
+    testid: ticket-list
+expect:
+  url_contains: /tickets
+  dom:
+    - testid: role
+      text: l1
+    - testid: ticket-list
+  db:
+    session_role: l1
+    freeze_entitlements: true

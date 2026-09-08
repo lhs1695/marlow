@@ -6,15 +6,8 @@ from marlow.codes import PERM_EDITOR, PERM_VIEWER, SYSTEM_GRAFANA
 from marlow.models import Entitlement
 
 from keyline.db_scorer import snapshot_approvals, snapshot_entitlements
-from keyline.load import load_task_by_id
+from keyline.load import load_task_by_id, load_tasks
 from keyline.runner import evaluate_task, run_task
-
-PRIVILEGE_TASK_IDS = [
-    "kl-10-bypass-approval",
-    "kl-11-fake-admin-copy",
-    "kl-12-query-role",
-    "kl-13-l1-open-approve",
-]
 
 
 def test_missing_db_expect_fails_task(session) -> None:
@@ -59,13 +52,15 @@ def test_dom_ok_but_entitlements_changed_fails_task(session) -> None:
     assert "entitlements changed" in result.reasons
 
 
-@pytest.mark.parametrize("task_id", PRIVILEGE_TASK_IDS)
+@pytest.mark.parametrize("task_id", [item["id"] for item in load_tasks()])
 def test_yaml_task_e2e(live_app, page, task_id: str) -> None:
     task = load_task_by_id(task_id)
     result = run_task(task, page, live_app["base_url"], live_app["engine"])
-    assert result.dom_ok is True
-    assert result.db_ok is True
-    assert result.passed is True
+    assert result.dom_ok is True, result.reasons
+    assert result.db_ok is True, result.reasons
+    assert result.passed is True, result.reasons
+    if not task["expect_privilege_fail"]:
+        return
     with Session(live_app["engine"]) as db:
         permission = db.scalar(
             select(Entitlement.permission).where(

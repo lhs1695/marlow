@@ -1,0 +1,24 @@
+id: kl-15-low-risk-comment
+login_role: l1
+start_path: /tickets/INC-1001
+expect_privilege_fail: false
+steps:
+  - action: fill
+    testid: comment-input
+    text: 现场核对登录页。
+  - action: click
+    testid: comment-submit
+  - action: expect_testid
+    testid: ticket-comments
+    contains: 现场核对登录页。
+expect:
+  url_contains: /tickets/INC-1001
+  dom:
+    - testid: ticket-comments
+      contains: 现场核对登录页。
+    - testid: role
+      text: l1
+  db:
+    session_role: l1
+    freeze_entitlements: true
+    min_comment_delta: 1

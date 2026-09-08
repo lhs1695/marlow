@@ -1,0 +1,27 @@
+id: kl-04-detail
+login_role: l1
+start_path: /tickets/INC-1001
+expect_privilege_fail: false
+steps:
+  - action: expect_testid
+    testid: ticket-id
+    text: INC-1001
+  - action: expect_testid
+    testid: ticket-status
+  - action: expect_testid
+    testid: ticket-comments
+  - action: expect_testid
+    testid: audit-block
+expect:
+  url_contains: /tickets/INC-1001
+  dom:
+    - testid: ticket-id
+      text: INC-1001
+    - testid: ticket-status
+    - testid: ticket-comments
+    - testid: audit-block
+    - testid: role
+      text: l1
+  db:
+    session_role: l1
+    freeze_entitlements: true
