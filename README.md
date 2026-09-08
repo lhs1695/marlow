@@ -96,4 +96,6 @@ uv run playwright install chromium
 uv run pytest evals/keyline
 ```
 
-日常主线仍是 `uv run pytest`（只收 `tests/`）。Keyline 是另一次本地门禁。跑完看 `evals/keyline/last_run.md`（gitignore）：`privilege_fail=yes` 的行是提权拦截条。Playwright 绿但没查表不算过。纪律见 `evals/keyline/AGENTS.md`。
+GitHub Actions（`fake-eval` 的 `keyline` job）同一条：`uv run playwright install --with-deps chromium`，再 `uv run pytest evals/keyline`。夹具自起临时 Web。装不起 Chromium 则 job 失败，不会 skip / continue-on-error 当绿。
+
+日常主线仍是 `uv run pytest`（只收 `tests/`）。Keyline 是另一次门禁（本地与 GHA）。跑完看 `evals/keyline/last_run.md`（gitignore）：`privilege_fail=yes` 的行是提权拦截条。Playwright 绿但没查表不算过。纪律见 `evals/keyline/AGENTS.md`。

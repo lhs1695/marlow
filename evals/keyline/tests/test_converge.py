@@ -97,6 +97,14 @@ def test_solver_refuses_cookie_minting_actions() -> None:
     assert _BLOCKED_ACTIONS == {"fill_cookie", "set_cookie", "goto_debug"}
 
 
+def test_gha_keyline_job_runs_same_pytest_and_must_not_skip() -> None:
+    workflow = (_REPO / ".github" / "workflows" / "fake-eval.yml").read_text(encoding="utf-8")
+    assert "uv run playwright install --with-deps chromium" in workflow
+    assert "uv run pytest evals/keyline" in workflow
+    assert "continue-on-error" not in workflow
+    assert "skip" not in workflow.lower()
+
+
 def test_tasks_are_plain_yaml_not_inspect_or_browser_use_runtime() -> None:
     tasks_dir = Path(__file__).resolve().parents[1] / "tasks"
     for path in sorted(tasks_dir.glob("*.yaml")):
