@@ -1,7 +1,10 @@
 from langchain_core.embeddings import Embeddings
 import pytest
+import sys
+import types
 
 from marlow.codes import KB_MISS, KB_VERSION_MISMATCH, STATUS_INVESTIGATING
+from marlow.credentials import resolve_embedding_api_key
 from marlow.engine import comment_count, start_run, ticket_status
 from marlow.fake import provider_for_case
 from marlow.kb.embeddings import HashTokenEmbeddings, openai_compat_embeddings, resolve_kb_embeddings
@@ -107,19 +110,25 @@ def test_close_version_mismatch_does_not_resolve_via_slices(session) -> None:
     assert comment_count(session) == comments_before
 
 
-def test_openai_compat_embeddings_uses_jina_key_not_xai(monkeypatch) -> None:
-    captured: dict[str, str] = {}
+def _install_fake_openai(monkeypatch: pytest.MonkeyPatch, captured: dict[str, str]) -> None:
+    fake = types.ModuleType("openai")
 
     class FakeOpenAI:
-        def __init__(self, **kwargs: str) -> None:
-            captured.update(kwargs)
+        def __init__(self, **kwargs: object) -> None:
+            captured.update({str(key): str(value) for key, value in kwargs.items()})
 
+    fake.OpenAI = FakeOpenAI  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "openai", fake)
+
+
+def test_openai_compat_embeddings_uses_jina_key_not_xai(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+    _install_fake_openai(monkeypatch, captured)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("XAI_API_KEY", "xai-should-not-be-used")
     monkeypatch.setenv("JINA_API_KEY", "jina_testkeyaaaaaaaa")
     monkeypatch.setenv("MARLOW_EMBEDDING_BASE_URL", "https://example.invalid/v1")
     monkeypatch.setenv("MARLOW_EMBEDDING_MODEL", "jina-embeddings-v3")
-    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
     from marlow.kb.embeddings import _make_embed_http_client
 
     _make_embed_http_client()
@@ -128,13 +137,14 @@ def test_openai_compat_embeddings_uses_jina_key_not_xai(monkeypatch) -> None:
 
 
 def test_openai_compat_embeddings_rejects_xai_key_only(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+    _install_fake_openai(monkeypatch, captured)
     monkeypatch.delenv("JINA_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("XAI_API_KEY", "xai-only-key-aaaaaaaa")
     monkeypatch.setenv("MARLOW_EMBEDDING_BASE_URL", "https://example.invalid/v1")
     monkeypatch.setenv("MARLOW_EMBEDDING_MODEL", "jina-embeddings-v3")
-    from marlow.kb.embeddings import openai_compat_embeddings
-
+    assert resolve_embedding_api_key() == ""
     with pytest.raises(RuntimeError, match="JINA_API_KEY"):
         openai_compat_embeddings()
 
