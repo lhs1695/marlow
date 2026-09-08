@@ -23,3 +23,6 @@ data/
 # Chroma persistence
 chroma/
 .chroma/
+
+# Live-model reports (not CI)
+evals/live/reports/

@@ -20,6 +20,9 @@ dependencies = [
 embeddings = [
     "langchain-openai>=0.2",
 ]
+llm = [
+    "openai>=1.40",
+]
 
 [dependency-groups]
 dev = [

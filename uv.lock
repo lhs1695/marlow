@@ -1376,6 +1376,9 @@ dependencies = [
 embeddings = [
     { name = "langchain-openai" },
 ]
+llm = [
+    { name = "openai" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1393,10 +1396,11 @@ requires-dist = [
     { name = "langchain-openai", marker = "extra == 'embeddings'", specifier = ">=0.2" },
     { name = "langchain-text-splitters", specifier = ">=0.3" },
     { name = "mcp", specifier = ">=2.1.1" },
+    { name = "openai", marker = "extra == 'llm'", specifier = ">=1.40" },
     { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "uvicorn", specifier = ">=0.32" },
 ]
-provides-extras = ["embeddings"]
+provides-extras = ["embeddings", "llm"]
 
 [package.metadata.requires-dev]
 dev = [

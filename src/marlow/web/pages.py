@@ -24,6 +24,7 @@ from marlow.codes import (
 from marlow.comments import add_ticket_comment
 from marlow.engine import extract_ticket_id, start_run
 from marlow.gateway import apply_entitlement_change, entitlement_permission
+from marlow.llm import want_real_llm
 from marlow.models import AuditEvent, Ticket
 from marlow.tools.tickets import get_ticket, search_tickets
 from marlow.web.auth import SESSION_ACTOR_KEY, actor_from_session
@@ -160,7 +161,7 @@ def register_pages(app: FastAPI) -> None:
         case_id = str(form.get("case_id") or "").strip() or None
         if case_id is None and extract_ticket_id(text):
             case_id = "investigate"
-        run = start_run(db, actor_id=actor.id, user_text=text, case_id=case_id)
+        run = start_run(db, actor_id=actor.id, user_text=text, case_id=case_id, real=want_real_llm())
         if run.outcome_code == NOT_ENOUGH_INFO:
             request.session["chat_clarify"] = run.final_answer or ""
         elif run.outcome_code == UNAUTHORIZED:

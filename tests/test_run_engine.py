@@ -126,13 +126,24 @@ def test_max_steps_does_not_close_ticket(session) -> None:
     assert "未关单" in (run.final_answer or "")
 
 
-def test_demo_case_1_prints_clarify(capsys) -> None:
+def test_demo_five_segments_fake(capsys, monkeypatch) -> None:
     from marlow.demo import main
 
-    assert main(["--case", "1"]) == 0
-    out = capsys.readouterr().out
-    assert "clarify" in out
-    assert "工单号" in out
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("MARLOW_LLM", raising=False)
+    expected = {
+        1: ("clarify", "工单号"),
+        2: ("Resolved", "grafana-login@10.4"),
+        3: ("降级", "retryable_timeout"),
+        4: ("approval_required", "Viewer"),
+        5: ("unauthorized", "未生效"),
+    }
+    for case, needles in expected.items():
+        assert main(["--case", str(case)]) == 0
+        out = capsys.readouterr().out
+        assert "provider=fake" in out
+        for needle in needles:
+            assert needle in out
 
 
 def test_demo_subprocess_stdout_is_utf8() -> None:

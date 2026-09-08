@@ -17,6 +17,11 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     ensure_utf8_stdio()
 
 
+@pytest.fixture(autouse=True)
+def _keep_pytest_on_fake_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MARLOW_LLM", raising=False)
+
+
 @pytest.fixture
 def session() -> Iterator[Session]:
     engine = make_engine("sqlite:///:memory:")

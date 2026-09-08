@@ -26,6 +26,7 @@ from marlow.codes import (
 from marlow.db import make_engine, prepare_database
 from marlow.engine import extract_ticket_id, start_run
 from marlow.gateway import apply_entitlement_change
+from marlow.llm import want_real_llm
 from marlow.models import Employee, Run, RunEvent
 from marlow.tools.tickets import get_ticket
 from marlow.web.auth import SESSION_ACTOR_KEY, actor_from_session, login_actor_id
@@ -147,7 +148,7 @@ def create_app(
         case_id = body.case_id
         if case_id is None and extract_ticket_id(text):
             case_id = "investigate"
-        run = start_run(db, actor_id=actor.id, user_text=text, case_id=case_id)
+        run = start_run(db, actor_id=actor.id, user_text=text, case_id=case_id, real=want_real_llm())
         return {
             "run_id": run.id,
             "request_id": run.request_id,

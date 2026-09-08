@@ -35,8 +35,9 @@ from marlow.codes import (
     SKILL_VERSION,
     STATUS_RESOLVED,
 )
-from marlow.fake import ActionProvider, provider_for_case
+from marlow.fake import ActionProvider, StepFeedback
 from marlow.faults import FaultHooks
+from marlow.llm import bind_provider, redact_secrets
 from marlow.models import AgentSession, MemoryNote, Run, RunEvent, Ticket, TicketComment
 from marlow.observation import Observation
 from marlow.skills import apply_skill, match_skill
@@ -77,7 +78,8 @@ def _set_status(session: Session, run: Run, status: str) -> None:
 
 
 def _emit(session: Session, run: Run, event_kind: str, **payload: Any) -> None:
-    session.add(RunEvent(run_id=run.id, kind=event_kind, payload=json.dumps(payload, ensure_ascii=False)))
+    blob = redact_secrets(json.dumps(payload, ensure_ascii=False))
+    session.add(RunEvent(run_id=run.id, kind=event_kind, payload=blob))
 
 
 def _charge(run: Run, limits: RunLimits) -> str | None:
@@ -103,6 +105,8 @@ def start_run(
     faults: FaultHooks | None = None,
     provider: ActionProvider | None = None,
     limits: RunLimits | None = None,
+    real: bool = False,
+    llm_client: Any | None = None,
 ) -> Run:
     limits = limits or RunLimits()
     hooks = faults or FaultHooks()
@@ -130,13 +134,19 @@ def start_run(
         _finish(session, run, agent_session, RUN_COMPLETED, NOT_ENOUGH_INFO, CLARIFY_ANSWER, verified={})
         return run
 
-    if provider is None:
-        if not case_id:
-            raise ValueError("case_id or provider is required")
-        provider = provider_for_case(case_id)
+    provider, llm_meta = bind_provider(
+        user_text=user_text,
+        case_id=case_id,
+        real=real,
+        provider=provider,
+        client=llm_client,
+    )
+    if llm_meta.get("provider") == "openai":
+        _emit(session, run, "llm", provider="openai", model=llm_meta.get("model", ""))
 
     verified: dict[str, Any] = {"ticket_id": ticket_id}
     _set_status(session, run, RUN_RUNNING)
+    feedback: StepFeedback | None = None
 
     while True:
         brake = _charge(run, limits)
@@ -145,7 +155,7 @@ def start_run(
             _finish(session, run, agent_session, RUN_FAILED, brake, MAX_STEPS_ANSWER, verified)
             return run
 
-        action = provider.next_action(ticket_id)
+        action = provider.next_action(ticket_id, feedback)
         _emit(
             session,
             run,
@@ -221,6 +231,13 @@ def start_run(
                     verified,
                 )
                 return run
+            feedback = StepFeedback(
+                action=action,
+                skill_code=skill_result.code,
+                skill_answer=skill_result.answer,
+                notes_untrusted=list(skill_result.notes_untrusted),
+                verified=dict(verified),
+            )
             continue
 
         if action.kind != ACTION_TOOL or not action.name:
@@ -242,6 +259,7 @@ def start_run(
 
         if obs.ok:
             _merge_verified(verified, action.name, obs)
+            feedback = StepFeedback(action=action, observation=obs, verified=dict(verified))
             continue
 
         if not obs.retryable:

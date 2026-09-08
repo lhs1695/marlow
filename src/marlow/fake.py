@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 from marlow.actions import Action, answer, skill, tool
 from marlow.codes import (
@@ -15,10 +15,23 @@ from marlow.codes import (
     SKILL_KB_QA,
     SYSTEM_GRAFANA,
 )
+from marlow.observation import Observation
+
+
+@dataclass
+class StepFeedback:
+    """Engine → provider: last Action outcome. Observations stay untrusted data."""
+
+    action: Action
+    observation: Observation | None = None
+    skill_code: str | None = None
+    skill_answer: str | None = None
+    notes_untrusted: list[str] = field(default_factory=list)
+    verified: dict[str, Any] = field(default_factory=dict)
 
 
 class ActionProvider(Protocol):
-    def next_action(self, ticket_id: str | None) -> Action: ...
+    def next_action(self, ticket_id: str | None, feedback: StepFeedback | None = None) -> Action: ...
 
 
 @dataclass
@@ -26,7 +39,7 @@ class ScriptProvider:
     script: list[Action]
     _index: int = field(default=0, init=False)
 
-    def next_action(self, ticket_id: str | None) -> Action:
+    def next_action(self, ticket_id: str | None, feedback: StepFeedback | None = None) -> Action:
         if self._index >= len(self.script):
             return answer()
         item = self.script[self._index]
@@ -39,7 +52,7 @@ class LoopToolProvider:
     tool_name: str
     arguments: dict
 
-    def next_action(self, ticket_id: str | None) -> Action:
+    def next_action(self, ticket_id: str | None, feedback: StepFeedback | None = None) -> Action:
         args = dict(self.arguments)
         if ticket_id and "ticket_id" in args:
             args["ticket_id"] = ticket_id
