@@ -1,4 +1,4 @@
-"""Task load / Playwright solver / DB scorer land in later phases."""
+"""Task load and Playwright solver land in later phases. DB scorer: db_scorer."""
 
 
 def load_tasks() -> list[dict]:
