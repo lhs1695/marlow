@@ -69,6 +69,15 @@ def build_chroma(
     )
 
 
+def ensure_chroma_dir(persist_directory: str | Path, *, embeddings: Embeddings | None = None) -> Path:
+    """Index handbook into an empty persist dir (Compose first start). Existing files are left alone."""
+    path = Path(persist_directory)
+    if path.exists() and any(path.iterdir()):
+        return path
+    build_chroma(path, embeddings=embeddings)
+    return path
+
+
 def search_chroma(
     query: str,
     persist_directory: str | Path,

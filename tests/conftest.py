@@ -20,6 +20,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 @pytest.fixture(autouse=True)
 def _keep_pytest_on_fake_llm(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MARLOW_LLM", raising=False)
+    monkeypatch.delenv("MARLOW_CHROMA_DIR", raising=False)
 
 
 @pytest.fixture

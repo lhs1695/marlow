@@ -47,6 +47,18 @@ def test_search_kb_miss_empty_hits() -> None:
     assert miss.data["hits"] == []
 
 
+def test_ensure_chroma_dir_indexes_once(tmp_path) -> None:
+    persist = tmp_path / "chroma"
+    from marlow.kb.store import ensure_chroma_dir
+
+    first = ensure_chroma_dir(persist)
+    marker = persist / "keep-me.txt"
+    marker.write_text("stay", encoding="utf-8")
+    ensure_chroma_dir(persist)
+    assert first == persist
+    assert marker.read_text(encoding="utf-8") == "stay"
+
+
 def test_chroma_persist_has_version_metadata_not_tickets(tmp_path) -> None:
     persist = tmp_path / "chroma"
     build_chroma(persist)

@@ -4,18 +4,20 @@
 
 个人 PoC：内部 IT 工单同事（模拟数据，非某公司线上系统）。L1 用自然语言调查 / 关单；权限变更须管理员审批。通过条件是**工单库 + 审计终态**，不是模型输出像成功。
 
-## 开发
+## 开发（venv / uv，日常默认）
 
-环境：Python 3.12，包管理用 [uv](https://docs.astral.sh/uv/)。
+环境：Python 3.12，包管理用 [uv](https://docs.astral.sh/uv/)。无 API Key 即可。
 
 ```bash
 uv sync
-pytest
+uv run pytest
+uv run python -m marlow.demo --case 1
+uv run python -m marlow.web
 ```
 
-GitHub Actions 同一套 Fake（`.github/workflows/fake-eval.yml`）。仓库 Secrets **不配**模型 Key。
+打开 `http://127.0.0.1:8000/`。GitHub Actions 同一套 Fake（`.github/workflows/fake-eval.yml`）。仓库 Secrets **不配**模型 Key。
 
-无 API Key 时用 Fake Provider 跑通评测；密钥放本地 `.env`（不进 git）。真模型是可选路径：`uv sync --extra llm` 后设 `OPENAI_API_KEY`（可设 `OPENAI_BASE_URL` / `MARLOW_CHAT_MODEL`），`python -m marlow.demo --case 2 --real`。缺 Key 时 `--real` 自动 Fake。真模型报告写入 `evals/live/reports/`（gitignore），不进 CI。
+密钥只放本地 `.env`（不进 git）。真模型可选：`uv sync --extra llm` 后设 `OPENAI_API_KEY`（可设 `OPENAI_BASE_URL` / `MARLOW_CHAT_MODEL`），`uv run python -m marlow.demo --case 2 --real`。缺 Key 时 `--real` 自动 Fake。真模型报告写入 `evals/live/reports/`（gitignore），不进 CI。
 
 手册钉 **Grafana 10.4**（文档取自 git tag `v10.4.3`，获取日期 **2026-09-07**），原文在 `handbook/grafana-10.4/`。CI / 默认 `search_kb` 对切片做固定检索夹具，**不打**真实 Embedding。本地可选建 Chroma 目录（gitignored）：
 
@@ -24,6 +26,22 @@ uv run python -m marlow.kb --persist chroma
 # 真 Embedding（需 OPENAI_API_KEY，可设 OPENAI_BASE_URL）：
 uv sync --extra embeddings
 uv run python -m marlow.kb --persist chroma --real
+```
+
+## Compose 演示（不是日常必经）
+
+本机 Docker Desktop。一容器：Web + SQLite 卷 + Chroma 卷。无 Key，Fake。首次 `up` 会用哈希向量建手册索引（较慢属正常）。
+
+```bash
+docker compose up --build
+```
+
+打开 `http://127.0.0.1:8000/`。停：`docker compose down`。清卷：`docker compose down -v`。
+
+Fake 五段日常仍用本机 venv（不写 Compose 卷里的库）：
+
+```bash
+uv run python -m marlow.demo --case 1
 ```
 
 ## 规格
@@ -38,18 +56,13 @@ uv run python -m marlow.kb --persist chroma --real
 
 ## 阶段
 
-当前：**阶段 9 人审通过** — 冻结 Fake 评测类型表 + GitHub Actions（无模型 Key）。日常仍 `uv run pytest`。下一阶段是 Compose 演示。
+当前：**阶段 10** — Compose 演示 + README 与真实命令对齐。日常仍 `uv sync` / `uv run pytest`。
 
-打开 `http://127.0.0.1:8000/` 选 L1 或管理员。工单列表 / 详情 / 审批队列；详情含只读审计。登录后底部对话条可澄清 / 调查。`data-testid` 见 `src/marlow/web/testids.py`。
+登录后四页 + 对话条。`data-testid` 见 `src/marlow/web/testids.py`。
 
 演示账号（角色只来自服务端 Session，忽略 `?role=`）：
 
 - L1：`l1` / `l1-demo`
 - 管理员：`admin` / `admin-demo`
 
-```bash
-python -m marlow.demo --case 1
-python -m marlow.web
-```
-
-Inspector / stdio（可选）：`python -m marlow.ticket_mcp`
+Inspector / stdio（可选）：`uv run python -m marlow.ticket_mcp`

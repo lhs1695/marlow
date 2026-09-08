@@ -1,0 +1,31 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      MARLOW_LLM: ""
+      MARLOW_WEB_HOST: 0.0.0.0
+      MARLOW_WEB_PORT: "8000"
+      MARLOW_DATABASE_URL: sqlite:////data/marlow.db
+      MARLOW_CHROMA_DIR: /chroma
+      MARLOW_SESSION_SECRET: marlow-compose-demo-not-for-production
+    volumes:
+      - sqlite:/data
+      - chroma:/chroma
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+
+volumes:
+  sqlite:
+  chroma:

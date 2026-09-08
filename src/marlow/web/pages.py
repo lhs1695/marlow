@@ -22,7 +22,7 @@ from marlow.codes import (
     UNAUTHORIZED,
 )
 from marlow.comments import add_ticket_comment
-from marlow.engine import extract_ticket_id, start_run
+from marlow.engine import http_fake_case_id, start_run
 from marlow.gateway import apply_entitlement_change, entitlement_permission
 from marlow.llm import want_real_llm
 from marlow.models import AuditEvent, Ticket
@@ -125,6 +125,8 @@ def register_pages(app: FastAPI) -> None:
     @app.post("/approvals")
     async def html_approval(request: Request, db: Db):
         actor = actor_from_session(request, db)
+        if actor.role != ROLE_ADMIN:
+            raise HTTPException(status_code=403, detail=UNAUTHORIZED)
         form = await request.form()
         ticket_id = str(form.get("ticket_id") or "")
         target = str(form.get("target_employee_id") or "")
@@ -158,10 +160,13 @@ def register_pages(app: FastAPI) -> None:
             nxt = "/tickets"
         if len(text) > MAX_INPUT_CHARS:
             raise HTTPException(status_code=400, detail="input_too_long")
-        case_id = str(form.get("case_id") or "").strip() or None
-        if case_id is None and extract_ticket_id(text):
-            case_id = "investigate"
-        run = start_run(db, actor_id=actor.id, user_text=text, case_id=case_id, real=want_real_llm())
+        run = start_run(
+            db,
+            actor_id=actor.id,
+            user_text=text,
+            case_id=http_fake_case_id(text),
+            real=want_real_llm(),
+        )
         if run.outcome_code == NOT_ENOUGH_INFO:
             request.session["chat_clarify"] = run.final_answer or ""
         elif run.outcome_code == UNAUTHORIZED:

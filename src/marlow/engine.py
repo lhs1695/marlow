@@ -68,6 +68,11 @@ def extract_ticket_id(text: str) -> str | None:
     return f"{prefix.upper()}-{rest}"
 
 
+def http_fake_case_id(user_text: str) -> str | None:
+    """HTTP ignores client case_id. A ticket id selects the investigate Fake; otherwise clarify."""
+    return "investigate" if extract_ticket_id(user_text) else None
+
+
 def _new_id() -> str:
     return uuid.uuid4().hex
 

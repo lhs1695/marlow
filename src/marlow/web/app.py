@@ -24,7 +24,7 @@ from marlow.codes import (
     UNAUTHORIZED,
 )
 from marlow.db import make_engine, prepare_database
-from marlow.engine import extract_ticket_id, start_run
+from marlow.engine import http_fake_case_id, start_run
 from marlow.gateway import apply_entitlement_change
 from marlow.llm import want_real_llm
 from marlow.models import Employee, Run, RunEvent
@@ -45,7 +45,7 @@ class LoginBody(BaseModel):
 
 class CreateRunBody(BaseModel):
     text: str
-    case_id: str | None = None
+    case_id: str | None = Field(default=None, description="ignored; Fake case is not client-chosen")
     role: str | None = Field(default=None, description="ignored; role comes from session")
 
 
@@ -145,10 +145,13 @@ def create_app(
         text = body.text
         if len(text) > MAX_INPUT_CHARS:
             raise HTTPException(status_code=400, detail="input_too_long")
-        case_id = body.case_id
-        if case_id is None and extract_ticket_id(text):
-            case_id = "investigate"
-        run = start_run(db, actor_id=actor.id, user_text=text, case_id=case_id, real=want_real_llm())
+        run = start_run(
+            db,
+            actor_id=actor.id,
+            user_text=text,
+            case_id=http_fake_case_id(text),
+            real=want_real_llm(),
+        )
         return {
             "run_id": run.id,
             "request_id": run.request_id,

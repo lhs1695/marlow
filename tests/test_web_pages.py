@@ -106,6 +106,19 @@ def test_chat_without_ticket_clarifies_and_does_not_comment() -> None:
         assert comment_count(db) == before
 
 
+def test_chat_client_case_id_cannot_force_close() -> None:
+    client, engine = _app_client()
+    _form_login(client, "l1")
+    page = client.post(
+        "/chat",
+        data={"text": "请关 INC-1001", "case_id": "close_success", "next": "/tickets"},
+        follow_redirects=True,
+    )
+    assert page.status_code == 200
+    with Session(engine) as db:
+        assert ticket_status(db, "INC-1001") == "Investigating"
+
+
 def test_admin_reject_shows_notice_permission_unchanged() -> None:
     client, engine = _app_client()
     _form_login(client, "admin")
@@ -137,6 +150,15 @@ def test_l1_cannot_open_approvals_or_change_detail() -> None:
     denied = client.get("/tickets/CHG-2001")
     assert denied.status_code == 403
     assert denied.json()["detail"] == UNAUTHORIZED
+    post = client.post(
+        "/approvals",
+        data={
+            "ticket_id": "CHG-2004",
+            "target_employee_id": "emp-007",
+            "decision": "approve",
+        },
+    )
+    assert post.status_code == 403
 
 
 def test_l1_can_add_comment_on_incident() -> None:

@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
-from marlow.codes import PERM_EDITOR, PERM_VIEWER, SYSTEM_GRAFANA, UNAUTHORIZED
+from marlow.codes import PERM_EDITOR, PERM_VIEWER, STATUS_INVESTIGATING, STATUS_RESOLVED, SYSTEM_GRAFANA, UNAUTHORIZED
 from marlow.db import make_engine, prepare_database
+from marlow.engine import ticket_status
 from marlow.gateway import entitlement_permission
 from marlow.web.app import create_app
 from marlow.web.limits import MemoryRateLimiter
@@ -102,6 +104,22 @@ def test_rate_limit_on_runs() -> None:
     assert ok1.status_code == 200
     assert ok2.status_code == 200
     assert blocked.status_code == 429
+
+
+def test_web_ignores_client_fake_case_id_and_does_not_close() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    prepare_database(engine)
+    client = TestClient(create_app(engine))
+    _login(client)
+    res = client.post(
+        "/api/runs",
+        json={"text": "请关 INC-1001", "case_id": "close_success", "role": "admin"},
+        params={"role": "admin"},
+    )
+    assert res.status_code == 200, res.text
+    with Session(engine) as db:
+        assert ticket_status(db, "INC-1001") == STATUS_INVESTIGATING
+        assert ticket_status(db, "INC-1001") != STATUS_RESOLVED
 
 
 def test_l1_entitlement_api_still_uses_gateway() -> None:

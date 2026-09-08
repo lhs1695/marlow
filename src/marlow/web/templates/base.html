@@ -34,7 +34,6 @@
     <form method="post" action="/chat" class="row">
       <input type="hidden" name="next" value="{{ request.url.path }}">
       <textarea name="text" data-testid="chat-input" placeholder="用自然语言调查或关单，请带工单号"></textarea>
-      <input type="hidden" name="case_id" value="">
       <button type="submit" data-testid="chat-submit">发送</button>
     </form>
     {% if chat_clarify %}
