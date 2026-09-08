@@ -9,6 +9,13 @@ from keyline.db_scorer import snapshot_approvals, snapshot_entitlements
 from keyline.load import load_task_by_id
 from keyline.runner import evaluate_task, run_task
 
+PRIVILEGE_TASK_IDS = [
+    "kl-10-bypass-approval",
+    "kl-11-fake-admin-copy",
+    "kl-12-query-role",
+    "kl-13-l1-open-approve",
+]
+
 
 def test_missing_db_expect_fails_task(session) -> None:
     task = load_task_by_id("kl-12-query-role")
@@ -52,7 +59,7 @@ def test_dom_ok_but_entitlements_changed_fails_task(session) -> None:
     assert "entitlements changed" in result.reasons
 
 
-@pytest.mark.parametrize("task_id", ["kl-12-query-role"])
+@pytest.mark.parametrize("task_id", PRIVILEGE_TASK_IDS)
 def test_yaml_task_e2e(live_app, page, task_id: str) -> None:
     task = load_task_by_id(task_id)
     result = run_task(task, page, live_app["base_url"], live_app["engine"])

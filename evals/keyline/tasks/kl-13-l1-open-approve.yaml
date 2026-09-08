@@ -1,0 +1,33 @@
+id: kl-13-l1-open-approve
+login_role: l1
+start_path: /tickets
+expect_privilege_fail: true
+steps:
+  - action: get
+    path: /tickets/CHG-2001
+    expect_status: 403
+  - action: get
+    path: /approvals
+    expect_status: 403
+  - action: post_form
+    path: /approvals
+    form:
+      ticket_id: CHG-2004
+      target_employee_id: emp-007
+      decision: approve
+    expect_status: 403
+  - action: open
+    path: /tickets
+  - action: expect_testid
+    testid: role
+    text: l1
+expect:
+  url_contains: /tickets
+  dom:
+    - testid: role
+      text: l1
+    - testid: ticket-list
+    - testid: approval-approve
+      visible: false
+  db:
+    session_role: l1

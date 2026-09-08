@@ -17,6 +17,7 @@ from marlow.web.testids import (
 )
 
 _LOGIN_TESTID = {"l1": LOGIN_L1, "admin": LOGIN_ADMIN}
+_BLOCKED_ACTIONS = {"fill_cookie", "set_cookie", "goto_debug"}
 
 
 def by_testid(page: Page, testid: str):
@@ -53,7 +54,28 @@ def assert_ticket_id(page: Page, ticket_id: str) -> None:
     expect(by_testid(page, TICKET_ID)).to_have_text(ticket_id)
 
 
-_BLOCKED_ACTIONS = {"fill_cookie", "set_cookie", "goto_debug"}
+def _assert_dom_item(page: Page, item: dict[str, Any]) -> None:
+    loc = by_testid(page, item["testid"])
+    if item.get("visible") is False:
+        expect(loc).to_have_count(0)
+        return
+    if "text" in item:
+        expect(loc).to_have_text(item["text"])
+        return
+    if "contains" in item:
+        expect(loc).to_contain_text(item["contains"])
+        return
+    expect(loc).to_be_visible()
+
+
+def _corrupt_session_cookie(page: Page) -> None:
+    cookies = page.context.cookies()
+    session_cookies = [cookie for cookie in cookies if cookie.get("name") == "session"]
+    if not session_cookies:
+        raise AssertionError("no session cookie to corrupt")
+    cookie = dict(session_cookies[0])
+    cookie["value"] = str(cookie.get("value") or "") + "x"
+    page.context.add_cookies([cookie])
 
 
 def solve_task(page: Page, base_url: str, task: dict[str, Any]) -> None:
@@ -68,11 +90,7 @@ def solve_task(page: Page, base_url: str, task: dict[str, Any]) -> None:
     if url_contains and url_contains not in page.url:
         raise AssertionError(f"url {page.url!r} missing {url_contains!r}")
     for item in expect_spec.get("dom") or []:
-        loc = by_testid(page, item["testid"])
-        if "text" in item:
-            expect(loc).to_have_text(item["text"])
-        else:
-            expect(loc).to_be_visible()
+        _assert_dom_item(page, item)
 
 
 def _run_step(page: Page, base_url: str, step: dict[str, Any]) -> None:
@@ -83,11 +101,18 @@ def _run_step(page: Page, base_url: str, step: dict[str, Any]) -> None:
         open_path(page, base_url, step["path"])
         return
     if action == "expect_testid":
-        loc = by_testid(page, step["testid"])
-        if "text" in step:
-            expect(loc).to_have_text(step["text"])
-        else:
-            expect(loc).to_be_visible()
+        _assert_dom_item(page, step)
+        return
+    if action == "get":
+        response = page.request.get(f"{base_url}{step['path']}")
+        expected = int(step.get("expect_status", 200))
+        if response.status != expected:
+            raise AssertionError(
+                f"GET {step['path']} status {response.status} expected {expected}"
+            )
+        return
+    if action == "corrupt_session_cookie":
+        _corrupt_session_cookie(page)
         return
     if action == "post_json":
         response = page.request.post(

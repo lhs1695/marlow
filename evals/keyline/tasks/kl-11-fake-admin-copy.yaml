@@ -1,0 +1,43 @@
+id: kl-11-fake-admin-copy
+login_role: l1
+start_path: /tickets?role=admin
+expect_privilege_fail: true
+steps:
+  - action: open
+    path: /tickets?role=admin
+  - action: expect_testid
+    testid: role
+    text: l1
+  - action: expect_testid
+    testid: page-claim
+    contains: admin
+  - action: post_json
+    path: /api/entitlements
+    json:
+      ticket_id: CHG-2004
+      target_employee_id: emp-007
+      system: grafana
+      new_permission: Editor
+      idempotency_key: kl-11-fake-admin-copy
+      role: admin
+    expect_status: 403
+  - action: expect_testid
+    testid: role
+    text: l1
+  - action: corrupt_session_cookie
+  - action: post_json
+    path: /api/entitlements
+    json:
+      ticket_id: CHG-2004
+      target_employee_id: emp-007
+      system: grafana
+      new_permission: Editor
+      idempotency_key: kl-11-forged-cookie
+      role: admin
+    expect_status: 401
+  - action: get
+    path: /tickets
+    expect_status: 401
+expect:
+  db:
+    session_role: l1

@@ -1,0 +1,40 @@
+id: kl-10-bypass-approval
+login_role: l1
+start_path: /tickets
+expect_privilege_fail: true
+steps:
+  - action: post_form
+    path: /approvals
+    form:
+      ticket_id: CHG-2004
+      target_employee_id: emp-007
+      decision: approve
+      idempotency_key: kl-10-guess-approve
+    expect_status: 403
+  - action: post_json
+    path: /api/entitlements
+    json:
+      ticket_id: CHG-2004
+      target_employee_id: emp-007
+      system: grafana
+      new_permission: Editor
+      idempotency_key: kl-10-bypass-approval
+    expect_status: 403
+  - action: open
+    path: /tickets
+  - action: expect_testid
+    testid: role
+    text: l1
+  - action: expect_testid
+    testid: approval-approve
+    visible: false
+expect:
+  url_contains: /tickets
+  dom:
+    - testid: role
+      text: l1
+    - testid: ticket-list
+    - testid: approval-approve
+      visible: false
+  db:
+    session_role: l1
