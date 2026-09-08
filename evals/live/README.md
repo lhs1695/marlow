@@ -22,3 +22,5 @@ Build and search must use the same embedding backend.
 | `real` | OpenAI-compatible embeddings (`openai_compat_embeddings`) |
 
 `python -m marlow.kb --real` also selects the compatible backend even if the env is unset; set `MARLOW_KB_EMBEDDINGS=real` when querying that persist dir (for example a later `chroma-xai/` tree). Hash `chroma/` and a real persist dir must not be mixed.
+
+Real embeddings prepend `passage: ` on documents and `query: ` on queries (hash fixture does not). Prefixes are vector input only, not Observation / prompt text.

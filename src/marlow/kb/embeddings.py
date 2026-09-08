@@ -11,6 +11,8 @@ from marlow.credentials import resolve_api_key
 
 _DIM = 64
 KB_EMBEDDINGS_ENV = "MARLOW_KB_EMBEDDINGS"
+_QUERY_PREFIX = "query: "
+_PASSAGE_PREFIX = "passage: "
 
 
 class HashTokenEmbeddings(Embeddings):
@@ -34,7 +36,20 @@ class HashTokenEmbeddings(Embeddings):
         return vec
 
 
-def openai_compat_embeddings() -> Embeddings:
+class QueryPassageEmbeddings(Embeddings):
+    """Official query/passage prefixes for real embeddings only. Does not change stored page_content."""
+
+    def __init__(self, inner: Embeddings) -> None:
+        self._inner = inner
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self._inner.embed_documents([_PASSAGE_PREFIX + text for text in texts])
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._inner.embed_query(_QUERY_PREFIX + text)
+
+
+def _compat_client() -> Embeddings:
     try:
         from langchain_openai import OpenAIEmbeddings
     except ImportError as exc:
@@ -50,6 +65,10 @@ def openai_compat_embeddings() -> Embeddings:
     if model:
         kwargs["model"] = model
     return OpenAIEmbeddings(**kwargs)
+
+
+def openai_compat_embeddings() -> Embeddings:
+    return QueryPassageEmbeddings(_compat_client())
 
 
 def resolve_kb_embeddings(*, real: bool = False) -> Embeddings:

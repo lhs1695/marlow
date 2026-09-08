@@ -193,3 +193,46 @@ def test_kb_main_real_uses_same_resolver(tmp_path, monkeypatch) -> None:
     obs = search_kb(query="grafana login localhost", persist_directory=persist)
     assert obs.ok is True
     assert queries
+
+
+def test_search_kb_real_backend_sends_query_prefix(tmp_path, monkeypatch) -> None:
+    queries: list[str] = []
+    documents: list[str] = []
+
+    class Recorder(Embeddings):
+        def __init__(self) -> None:
+            self._inner = HashTokenEmbeddings()
+
+        def embed_documents(self, texts: list[str]) -> list[list[float]]:
+            documents.extend(texts)
+            return self._inner.embed_documents(texts)
+
+        def embed_query(self, text: str) -> list[float]:
+            queries.append(text)
+            return self._inner.embed_query(text)
+
+    recorder = Recorder()
+    monkeypatch.setenv("MARLOW_KB_EMBEDDINGS", "real")
+    monkeypatch.setattr("marlow.kb.embeddings._compat_client", lambda: recorder)
+    persist = tmp_path / "chroma"
+    build_chroma(persist, embeddings=resolve_kb_embeddings())
+    obs = search_kb(query="grafana login localhost", persist_directory=persist)
+    assert obs.ok is True
+    assert obs.untrusted is True
+    assert queries
+    assert all(item.startswith("query: ") for item in queries)
+    assert "grafana login localhost" in queries[0]
+    assert documents
+    assert all(item.startswith("passage: ") for item in documents)
+    for row in obs.data["hits"]:
+        assert not row["text"].startswith("query: ")
+        assert not row["text"].startswith("passage: ")
+
+
+def test_hash_embeddings_do_not_add_official_prefixes() -> None:
+    hit = search_kb(query="grafana login localhost")
+    assert hit.ok is True
+    assert all(not row["text"].startswith("query: ") for row in hit.data["hits"])
+    assert all(not row["text"].startswith("passage: ") for row in hit.data["hits"])
+    hasher = HashTokenEmbeddings()
+    assert hasher.embed_query("grafana login") != hasher.embed_query("query: grafana login")
