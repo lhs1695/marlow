@@ -22,7 +22,7 @@ from marlow.codes import (
     UNAUTHORIZED,
 )
 from marlow.comments import add_ticket_comment
-from marlow.engine import http_fake_case_id, start_run
+from marlow.engine import http_fake_case_id, http_fake_faults, start_run
 from marlow.gateway import apply_entitlement_change, entitlement_permission
 from marlow.llm import want_real_llm
 from marlow.models import AuditEvent, Ticket
@@ -165,6 +165,7 @@ def register_pages(app: FastAPI) -> None:
             actor_id=actor.id,
             user_text=text,
             case_id=http_fake_case_id(text),
+            faults=http_fake_faults(text),
             real=want_real_llm(),
         )
         if run.outcome_code == NOT_ENOUGH_INFO:

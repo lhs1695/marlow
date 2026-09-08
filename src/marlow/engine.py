@@ -36,7 +36,7 @@ from marlow.codes import (
     STATUS_RESOLVED,
 )
 from marlow.fake import ActionProvider, StepFeedback
-from marlow.faults import FaultHooks
+from marlow.faults import FAULT_TIMEOUT, FaultHooks
 from marlow.llm import bind_provider, redact_secrets
 from marlow.models import AgentSession, MemoryNote, Run, RunEvent, Ticket, TicketComment
 from marlow.observation import Observation
@@ -68,9 +68,29 @@ def extract_ticket_id(text: str) -> str | None:
     return f"{prefix.upper()}-{rest}"
 
 
+# HTTP Fake is chosen only from the ticket id parsed out of user text.
+# Client JSON/query case_id is ignored. Unlisted tickets stay investigate, never close_success.
+_HTTP_FAKE_BY_TICKET: dict[str, str] = {
+    "INC-1001": "close_success",
+    "INC-1005": "timeout",
+    "CHG-2004": "investigate",
+}
+
+
 def http_fake_case_id(user_text: str) -> str | None:
-    """HTTP ignores client case_id. A ticket id selects the investigate Fake; otherwise clarify."""
-    return "investigate" if extract_ticket_id(user_text) else None
+    """Map a parsed seed ticket to a Fake script. No ticket → None (clarify)."""
+    ticket_id = extract_ticket_id(user_text)
+    if ticket_id is None:
+        return None
+    return _HTTP_FAKE_BY_TICKET.get(ticket_id, "investigate")
+
+
+def http_fake_faults(user_text: str) -> FaultHooks:
+    """Timeout seed needs the same in-process asset fault as CLI Fake case 3."""
+    hooks = FaultHooks()
+    if http_fake_case_id(user_text) == "timeout":
+        hooks.set_target("get_asset", "ast-laptop-casey", FAULT_TIMEOUT)
+    return hooks
 
 
 def _new_id() -> str:

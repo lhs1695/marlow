@@ -113,13 +113,13 @@ def test_web_ignores_client_fake_case_id_and_does_not_close() -> None:
     _login(client)
     res = client.post(
         "/api/runs",
-        json={"text": "请关 INC-1001", "case_id": "close_success", "role": "admin"},
-        params={"role": "admin"},
+        json={"text": "请关 INC-1002", "case_id": "close_success", "role": "admin"},
+        params={"case_id": "close_success", "role": "admin"},
     )
     assert res.status_code == 200, res.text
     with Session(engine) as db:
-        assert ticket_status(db, "INC-1001") == STATUS_INVESTIGATING
-        assert ticket_status(db, "INC-1001") != STATUS_RESOLVED
+        assert ticket_status(db, "INC-1002") == STATUS_INVESTIGATING
+        assert ticket_status(db, "INC-1002") != STATUS_RESOLVED
 
 
 def test_l1_entitlement_api_still_uses_gateway() -> None:

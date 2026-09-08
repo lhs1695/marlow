@@ -1,10 +1,12 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from marlow.codes import PERM_EDITOR, PERM_VIEWER, SYSTEM_GRAFANA, UNAUTHORIZED
+from marlow.codes import PERM_EDITOR, PERM_VIEWER, STATUS_RESOLVED, SYSTEM_GRAFANA, UNAUTHORIZED
 from marlow.db import make_engine, prepare_database
 from marlow.engine import comment_count, ticket_status
 from marlow.gateway import entitlement_permission
+from marlow.models import TicketComment
 from marlow.web.app import create_app
 from marlow.web.testids import (
     APPROVAL_APPROVE,
@@ -112,12 +114,31 @@ def test_chat_client_case_id_cannot_force_close() -> None:
     _form_login(client, "l1")
     page = client.post(
         "/chat",
-        data={"text": "请关 INC-1001", "case_id": "close_success", "next": "/tickets"},
+        data={"text": "请关 INC-1002", "case_id": "close_success", "next": "/tickets"},
         follow_redirects=True,
     )
     assert page.status_code == 200
     with Session(engine) as db:
-        assert ticket_status(db, "INC-1001") == "Investigating"
+        assert ticket_status(db, "INC-1002") == "Investigating"
+
+
+def test_chat_inc_1001_closes_with_citation() -> None:
+    client, engine = _app_client()
+    _form_login(client, "l1")
+    page = client.post(
+        "/chat",
+        data={"text": "请调查 INC-1001 并关单", "next": "/tickets"},
+        follow_redirects=True,
+    )
+    assert page.status_code == 200
+    with Session(engine) as db:
+        assert ticket_status(db, "INC-1001") == STATUS_RESOLVED
+        closing = [
+            row.body
+            for row in db.scalars(select(TicketComment).where(TicketComment.ticket_id == "INC-1001"))
+            if "ticket_id=INC-1001" in row.body and "grafana-login@10.4" in row.body
+        ]
+        assert closing
 
 
 def test_l1_chat_on_change_ticket_shows_deny_entitlements_unchanged() -> None:
