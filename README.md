@@ -1,5 +1,7 @@
 # Marlow
 
+[![fake-eval](https://github.com/lhs1695/marlow/actions/workflows/fake-eval.yml/badge.svg)](https://github.com/lhs1695/marlow/actions/workflows/fake-eval.yml)
+
 个人 PoC：内部 IT 工单同事（模拟数据，非某公司线上系统）。L1 用自然语言调查 / 关单；权限变更须管理员审批。通过条件是**工单库 + 审计终态**，不是模型输出像成功。
 
 ## 开发
@@ -36,7 +38,7 @@ uv run python -m marlow.kb --persist chroma --real
 
 ## 阶段
 
-当前：**阶段 9** — 冻结 Fake 评测类型表 + GitHub Actions（无模型 Key）。日常仍 `uv run pytest`。
+当前：**阶段 9 人审通过** — 冻结 Fake 评测类型表 + GitHub Actions（无模型 Key）。日常仍 `uv run pytest`。下一阶段是 Compose 演示。
 
 打开 `http://127.0.0.1:8000/` 选 L1 或管理员。工单列表 / 详情 / 审批队列；详情含只读审计。登录后底部对话条可澄清 / 调查。`data-testid` 见 `src/marlow/web/testids.py`。
 
