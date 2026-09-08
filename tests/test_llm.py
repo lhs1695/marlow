@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from marlow.actions import skill
 from marlow.codes import STATUS_RESOLVED
 from marlow.engine import start_run, ticket_status
@@ -12,7 +14,9 @@ from marlow.llm import (
     action_from_payload,
     bind_provider,
     format_feedback,
+    has_api_key,
     redact_secrets,
+    resolve_chat_model,
     want_real_llm,
     write_live_report,
 )
@@ -45,6 +49,36 @@ def test_redact_strips_api_key_and_sk_tokens(monkeypatch) -> None:
     assert "sk-abcdefghijk" not in out
     assert "Bearer abc.def" not in out
     assert "[REDACTED]" in out
+
+
+def test_has_api_key_accepts_xai_key_only(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("XAI_API_KEY", "xai-only-key-aaaaaaaa")
+    assert has_api_key() is True
+
+
+def test_redact_covers_xai_prefix_and_env(monkeypatch) -> None:
+    monkeypatch.setenv("XAI_API_KEY", "xai-env-secret-value-zz")
+    text = "header xai-abcdefghijk leftover xai-env-secret-value-zz"
+    out = redact_secrets(text)
+    assert "xai-abcdefghijk" not in out
+    assert "xai-env-secret-value-zz" not in out
+    assert "[REDACTED]" in out
+
+
+def test_custom_base_url_requires_chat_model(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.invalid/v1")
+    monkeypatch.delenv("MARLOW_CHAT_MODEL", raising=False)
+    with pytest.raises(RuntimeError, match="MARLOW_CHAT_MODEL"):
+        resolve_chat_model()
+    with pytest.raises(RuntimeError, match="MARLOW_CHAT_MODEL"):
+        OpenAIActionProvider("hi", client=object())
+
+
+def test_source_does_not_hardcode_xai_host() -> None:
+    root = Path(__file__).resolve().parents[1] / "src"
+    for path in root.rglob("*.py"):
+        assert "api.x.ai" not in path.read_text(encoding="utf-8")
 
 
 def test_observation_feedback_is_user_data_not_system() -> None:

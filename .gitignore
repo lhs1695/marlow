@@ -4,6 +4,7 @@
 # Secrets
 .env
 .env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -21,7 +22,7 @@ wheels/
 data/
 
 # Chroma persistence
-chroma/
+chroma*/
 .chroma/
 
 # Live-model reports (not CI)

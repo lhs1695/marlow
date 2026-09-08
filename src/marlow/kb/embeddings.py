@@ -7,7 +7,10 @@ import os
 
 from langchain_core.embeddings import Embeddings
 
+from marlow.credentials import resolve_api_key
+
 _DIM = 64
+KB_EMBEDDINGS_ENV = "MARLOW_KB_EMBEDDINGS"
 
 
 class HashTokenEmbeddings(Embeddings):
@@ -36,9 +39,9 @@ def openai_compat_embeddings() -> Embeddings:
         from langchain_openai import OpenAIEmbeddings
     except ImportError as exc:
         raise RuntimeError("install openai extra (langchain-openai) for --real embeddings") from exc
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = resolve_api_key()
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY required for --real embeddings")
+        raise RuntimeError("XAI_API_KEY or OPENAI_API_KEY required for --real embeddings")
     kwargs: dict[str, str] = {"api_key": api_key}
     base = os.environ.get("OPENAI_BASE_URL")
     if base:
@@ -47,3 +50,12 @@ def openai_compat_embeddings() -> Embeddings:
     if model:
         kwargs["model"] = model
     return OpenAIEmbeddings(**kwargs)
+
+
+def resolve_kb_embeddings(*, real: bool = False) -> Embeddings:
+    if real:
+        return openai_compat_embeddings()
+    value = os.environ.get(KB_EMBEDDINGS_ENV, "").strip().lower()
+    if value in {"real", "openai", "1", "true"}:
+        return openai_compat_embeddings()
+    return HashTokenEmbeddings()

@@ -8,7 +8,7 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
-from marlow.kb.embeddings import HashTokenEmbeddings
+from marlow.kb.embeddings import resolve_kb_embeddings
 from marlow.kb.split import split_handbook
 
 COLLECTION = "grafana_handbook"
@@ -63,7 +63,7 @@ def build_chroma(
     path.mkdir(parents=True, exist_ok=True)
     return Chroma.from_documents(
         documents=docs,
-        embedding=embeddings or HashTokenEmbeddings(),
+        embedding=embeddings or resolve_kb_embeddings(),
         persist_directory=str(path),
         collection_name=COLLECTION,
     )
@@ -90,7 +90,7 @@ def search_chroma(
         return []
     store = Chroma(
         collection_name=COLLECTION,
-        embedding_function=embeddings or HashTokenEmbeddings(),
+        embedding_function=embeddings or resolve_kb_embeddings(),
         persist_directory=str(persist_directory),
     )
     docs = store.similarity_search(needle, k=k)
@@ -100,7 +100,7 @@ def search_chroma(
 def chroma_metadatas(persist_directory: str | Path, *, embeddings: Embeddings | None = None) -> list[dict]:
     store = Chroma(
         collection_name=COLLECTION,
-        embedding_function=embeddings or HashTokenEmbeddings(),
+        embedding_function=embeddings or resolve_kb_embeddings(),
         persist_directory=str(persist_directory),
     )
     dumped = store.get(include=["metadatas"])

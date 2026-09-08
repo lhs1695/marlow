@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from marlow.credentials import load_local_env
 from marlow.stdio import ensure_utf8_stdio
 
 
@@ -15,16 +16,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--real",
         action="store_true",
-        help="Use OpenAI-compatible embeddings (OPENAI_API_KEY). Default is hash embeddings.",
+        help="Use OpenAI-compatible embeddings (XAI_API_KEY or OPENAI_API_KEY). Default is hash embeddings.",
     )
     args = parser.parse_args(argv)
+    load_local_env()
 
-    from marlow.kb.embeddings import HashTokenEmbeddings, openai_compat_embeddings
+    from marlow.kb.embeddings import resolve_kb_embeddings
     from marlow.kb.split import split_handbook
     from marlow.kb.store import build_chroma
 
     chunks = split_handbook()
-    embeddings = openai_compat_embeddings() if args.real else HashTokenEmbeddings()
+    embeddings = resolve_kb_embeddings(real=args.real)
     build_chroma(args.persist, embeddings=embeddings, chunks=chunks)
     print(f"indexed {len(chunks)} chunks into {args.persist} real={args.real}")
     return 0

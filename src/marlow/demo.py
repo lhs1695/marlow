@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from marlow.credentials import load_local_env
 from marlow.stdio import ensure_utf8_stdio
 
 ensure_utf8_stdio()
@@ -106,13 +107,18 @@ def main(argv: list[str] | None = None) -> int:
     ensure_utf8_stdio()
     parser = argparse.ArgumentParser(description="Marlow demo (Fake default; --real for OpenAI)")
     parser.add_argument("--case", type=int, required=True, choices=sorted(DEMO_CASES))
-    parser.add_argument("--real", action="store_true", help="Use OpenAI-compatible chat if OPENAI_API_KEY is set")
+    parser.add_argument(
+        "--real",
+        action="store_true",
+        help="Use OpenAI-compatible chat if XAI_API_KEY or OPENAI_API_KEY is set",
+    )
     parser.add_argument(
         "--report",
         type=Path,
         help="Write a live-model report JSON (gitignored). Not used in CI.",
     )
     args = parser.parse_args(argv)
+    load_local_env()
     engine = make_engine("sqlite:///:memory:")
     prepare_database(engine)
     with Session(engine) as session:

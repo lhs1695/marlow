@@ -1380,6 +1380,7 @@ dependencies = [
     { name = "langchain-core" },
     { name = "langchain-text-splitters" },
     { name = "mcp" },
+    { name = "python-dotenv" },
     { name = "sqlalchemy" },
     { name = "uvicorn" },
 ]
@@ -1411,6 +1412,7 @@ requires-dist = [
     { name = "langchain-text-splitters", specifier = ">=0.3" },
     { name = "mcp", specifier = ">=2.1.1" },
     { name = "openai", marker = "extra == 'llm'", specifier = ">=1.40" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "uvicorn", specifier = ">=0.32" },
 ]

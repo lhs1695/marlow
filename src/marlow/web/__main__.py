@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 
+from marlow.credentials import load_local_env
 from marlow.stdio import ensure_utf8_stdio
 
 WEB_HOST_ENV = "MARLOW_WEB_HOST"
@@ -23,6 +24,7 @@ def _prepare_chroma() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ensure_utf8_stdio()
+    load_local_env()
     import uvicorn
 
     host = os.environ.get(WEB_HOST_ENV, "127.0.0.1").strip() or "127.0.0.1"
