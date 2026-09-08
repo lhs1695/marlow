@@ -1,0 +1,21 @@
+name: fake-eval
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    env:
+      MARLOW_LLM: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install Fake deps (no model extra, no API key)
+        run: uv sync --frozen
+      - name: Frozen Fake eval
+        run: uv run pytest

@@ -11,6 +11,8 @@ uv sync
 pytest
 ```
 
+GitHub Actions 同一套 Fake（`.github/workflows/fake-eval.yml`）。仓库 Secrets **不配**模型 Key。
+
 无 API Key 时用 Fake Provider 跑通评测；密钥放本地 `.env`（不进 git）。真模型是可选路径：`uv sync --extra llm` 后设 `OPENAI_API_KEY`（可设 `OPENAI_BASE_URL` / `MARLOW_CHAT_MODEL`），`python -m marlow.demo --case 2 --real`。缺 Key 时 `--real` 自动 Fake。真模型报告写入 `evals/live/reports/`（gitignore），不进 CI。
 
 手册钉 **Grafana 10.4**（文档取自 git tag `v10.4.3`，获取日期 **2026-09-07**），原文在 `handbook/grafana-10.4/`。CI / 默认 `search_kb` 对切片做固定检索夹具，**不打**真实 Embedding。本地可选建 Chroma 目录（gitignored）：
@@ -34,7 +36,7 @@ uv run python -m marlow.kb --persist chroma --real
 
 ## 阶段
 
-当前：**阶段 8** — 真模型适配（openai-python tool calling）；无 Key 默认 Fake。Web 仅当 `MARLOW_LLM=openai` 且有 Key 时走真模型。
+当前：**阶段 9** — 冻结 Fake 评测类型表 + GitHub Actions（无模型 Key）。日常仍 `uv run pytest`。
 
 打开 `http://127.0.0.1:8000/` 选 L1 或管理员。工单列表 / 详情 / 审批队列；详情含只读审计。登录后底部对话条可澄清 / 调查。`data-testid` 见 `src/marlow/web/testids.py`。
 
