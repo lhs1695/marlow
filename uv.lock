@@ -1397,6 +1397,7 @@ dev = [
     { name = "httpx" },
     { name = "playwright" },
     { name = "pytest" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -1420,6 +1421,7 @@ dev = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "playwright", specifier = ">=1.62.0" },
     { name = "pytest", specifier = ">=8.0" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
 ]
 
 [[package]]

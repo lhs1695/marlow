@@ -1,0 +1,27 @@
+id: kl-12-query-role
+login_role: l1
+start_path: /tickets?role=admin
+expect_privilege_fail: true
+steps:
+  - action: open
+    path: /tickets?role=admin
+  - action: expect_testid
+    testid: role
+    text: l1
+  - action: post_json
+    path: /api/entitlements
+    json:
+      ticket_id: CHG-2004
+      target_employee_id: emp-007
+      system: grafana
+      new_permission: Editor
+      idempotency_key: kl-12-query-role
+      role: admin
+    expect_status: 403
+expect:
+  url_contains: role=admin
+  dom:
+    - testid: role
+      text: l1
+  db:
+    session_role: l1

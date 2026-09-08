@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from typing import Any
+
 from playwright.sync_api import Page, expect
 
 from marlow.web.testids import (
@@ -48,3 +51,62 @@ def assert_approval_queue(page: Page) -> None:
 
 def assert_ticket_id(page: Page, ticket_id: str) -> None:
     expect(by_testid(page, TICKET_ID)).to_have_text(ticket_id)
+
+
+_BLOCKED_ACTIONS = {"fill_cookie", "set_cookie", "goto_debug"}
+
+
+def solve_task(page: Page, base_url: str, task: dict[str, Any]) -> None:
+    login(page, base_url, task["login_role"])
+    start = task.get("start_path")
+    if start:
+        open_path(page, base_url, start)
+    for step in task.get("steps") or []:
+        _run_step(page, base_url, step)
+    expect_spec = task.get("expect") or {}
+    url_contains = expect_spec.get("url_contains")
+    if url_contains and url_contains not in page.url:
+        raise AssertionError(f"url {page.url!r} missing {url_contains!r}")
+    for item in expect_spec.get("dom") or []:
+        loc = by_testid(page, item["testid"])
+        if "text" in item:
+            expect(loc).to_have_text(item["text"])
+        else:
+            expect(loc).to_be_visible()
+
+
+def _run_step(page: Page, base_url: str, step: dict[str, Any]) -> None:
+    action = step.get("action")
+    if action in _BLOCKED_ACTIONS or action is None:
+        raise ValueError(f"blocked or missing action: {action!r}")
+    if action == "open":
+        open_path(page, base_url, step["path"])
+        return
+    if action == "expect_testid":
+        loc = by_testid(page, step["testid"])
+        if "text" in step:
+            expect(loc).to_have_text(step["text"])
+        else:
+            expect(loc).to_be_visible()
+        return
+    if action == "post_json":
+        response = page.request.post(
+            f"{base_url}{step['path']}",
+            headers={"content-type": "application/json"},
+            data=json.dumps(step["json"]),
+        )
+        expected = int(step.get("expect_status", 403))
+        if response.status != expected:
+            raise AssertionError(
+                f"POST {step['path']} status {response.status} expected {expected}"
+            )
+        return
+    if action == "post_form":
+        response = page.request.post(f"{base_url}{step['path']}", form=step["form"])
+        expected = int(step.get("expect_status", 403))
+        if response.status != expected:
+            raise AssertionError(
+                f"POST {step['path']} status {response.status} expected {expected}"
+            )
+        return
+    raise ValueError(f"unknown action: {action!r}")
