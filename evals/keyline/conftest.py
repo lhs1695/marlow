@@ -81,4 +81,5 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     from keyline.runner import TASK_REPORT, write_last_run
 
     if TASK_REPORT:
-        write_last_run()
+        text = write_last_run()
+        print("\n" + text, end="")

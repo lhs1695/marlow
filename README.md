@@ -84,3 +84,16 @@ uv run python -m marlow.demo --case 1
 - 管理员：`admin` / `admin-demo`
 
 Inspector / stdio（可选）：`uv run python -m marlow.ticket_mcp`
+
+## Keyline（浏览器通道评测）
+
+测四页 Web 会不会比 MCP 更能改权限。通过条件是 URL/DOM **且** 同一张审批表、同一套会话角色，不是页面看起来绿。无 API Key、无 LLM judge。
+
+Chromium 与 pip 包分开装一次；评测夹具会自己拉起临时 Web（内存 SQLite），不要对着另开的 `python -m marlow.web` 跑（那是另一套库）。
+
+```bash
+uv run playwright install chromium
+uv run pytest evals/keyline
+```
+
+日常主线仍是 `uv run pytest`（只收 `tests/`）。Keyline 是另一次本地门禁。跑完看 `evals/keyline/last_run.md`（gitignore）：`privilege_fail=yes` 的行是提权拦截条。Playwright 绿但没查表不算过。纪律见 `evals/keyline/AGENTS.md`。

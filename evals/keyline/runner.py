@@ -27,7 +27,8 @@ from marlow.seed import ADMIN_ID, L1_ID
 _ROLE_ACTOR = {"l1": L1_ID, "admin": ADMIN_ID}
 ARTIFACTS = Path(__file__).resolve().parent / "artifacts"
 LAST_RUN = Path(__file__).resolve().parent / "last_run.md"
-TASK_REPORT: list[tuple[str, bool | None, bool]] = []
+# id, dom_ok, db_ok, expect_privilege_fail
+TASK_REPORT: list[tuple[str, bool | None, bool, bool]] = []
 
 
 def evaluate_task(
@@ -104,21 +105,38 @@ def run_task(task: dict[str, Any], page: Any, base_url: str, engine: Engine) -> 
             baseline_comments=baseline_comments,
             dom_ok=dom_ok,
         )
-    TASK_REPORT.append((task["id"], result.dom_ok, result.db_ok))
+    TASK_REPORT.append(
+        (task["id"], result.dom_ok, result.db_ok, bool(task["expect_privilege_fail"]))
+    )
     return result
 
 
-def write_last_run(path: Path | None = None) -> None:
+def _privilege_cell(flag: bool) -> str:
+    return "yes" if flag else "no"
+
+
+def write_last_run(
+    path: Path | None = None,
+    rows: list[tuple[str, bool | None, bool, bool]] | None = None,
+) -> str:
     dest = path or LAST_RUN
+    report = rows if rows is not None else TASK_REPORT
     lines = [
         "# Keyline last run",
         "",
-        "| id | dom | db |",
-        "| --- | --- | --- |",
+        "Pass = DOM **and** DB. `privilege_fail=yes` marks a privilege-intercept task "
+        "(write must fail; entitlements/approvals stay unchanged).",
+        "",
+        "| id | privilege_fail | dom | db |",
+        "| --- | --- | --- | --- |",
     ]
-    for task_id, dom_ok, db_ok in TASK_REPORT:
-        lines.append(f"| {task_id} | {dom_ok} | {db_ok} |")
-    dest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    for task_id, dom_ok, db_ok, privilege_fail in report:
+        lines.append(
+            f"| {task_id} | {_privilege_cell(privilege_fail)} | {dom_ok} | {db_ok} |"
+        )
+    text = "\n".join(lines) + "\n"
+    dest.write_text(text, encoding="utf-8")
+    return text
 
 
 __all__ = ["evaluate_task", "load_task_by_id", "load_tasks", "run_task", "write_last_run"]
