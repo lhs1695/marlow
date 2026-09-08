@@ -17,15 +17,16 @@ uv run python -m marlow.web
 
 打开 `http://127.0.0.1:8000/`。GitHub Actions（`.github/workflows/fake-eval.yml`）跑 Fake `pytest`，另有 `keyline` job。仓库 Secrets **不配**模型 Key。
 
-密钥只放本地 `.env`（不进 git，对照 `.env.example`）。演示档案是 **xAI**（`XAI_API_KEY`，无则回退 `OPENAI_API_KEY`）；把 `OPENAI_BASE_URL` / `MARLOW_CHAT_MODEL` 写在 `.env`，**host 不进源代码**。CI 与 `uv run pytest` 仍 Fake，仓库 Secrets **不配**模型 Key。真模型：`uv sync --extra llm` 后 `uv run python -m marlow.demo --case 2 --real`。缺 Key 时 `--real` 自动 Fake。报告写入 `evals/live/reports/`（gitignore），不进 CI。
+密钥只放本地 `.env`（不进 git，对照 `.env.example`）。演示档案是 **xAI 聊天 + Jina 向量**：`XAI_API_KEY`（无则回退 `OPENAI_API_KEY`）配 `OPENAI_BASE_URL` / `MARLOW_CHAT_MODEL`；向量用 `JINA_API_KEY`、`MARLOW_EMBEDDING_BASE_URL`、`MARLOW_EMBEDDING_MODEL`。**host 不进源代码**。CI 与 `uv run pytest` 仍 Fake，仓库 Secrets **不配**模型 Key。真模型：`uv sync --extra llm` 后 `uv run python -m marlow.demo --case 2 --real`。缺聊天 Key 时 `--real` 自动 Fake。报告写入 `evals/live/reports/`（gitignore），不进 CI。
 
-手册钉 **Grafana 10.4**（文档取自 git tag `v10.4.3`，获取日期 **2026-09-07**），原文在 `handbook/grafana-10.4/`。CI / 默认 `search_kb` 对切片做固定检索夹具，**不打**真实 Embedding。本地可选建 Chroma 目录（gitignored）：
+手册钉 **Grafana 10.4**（文档取自 git tag `v10.4.3`，获取日期 **2026-09-07**），原文在 `handbook/grafana-10.4/`。CI / 默认 `search_kb` 对切片做固定检索夹具，**不打**真实 Embedding。本地可选建 Chroma 目录（gitignored）：哈希用 `chroma/`，真向量用独立的 `chroma-jina/`，不要混、不要覆盖。
 
 ```bash
 uv run python -m marlow.kb --persist chroma
-# 真 Embedding（需 XAI_API_KEY 或 OPENAI_API_KEY；host 只在 .env）：
-uv sync --extra embeddings
-uv run python -m marlow.kb --persist chroma --real
+# 真 Embedding（JINA_API_KEY；host 只在 .env）：
+uv sync --extra llm
+uv run python -m marlow.kb --persist chroma-jina --real
+# 检索同一目录：MARLOW_CHROMA_DIR=chroma-jina MARLOW_KB_EMBEDDINGS=real
 ```
 
 建库与检索必须同一嵌入后端：无 `MARLOW_KB_EMBEDDINGS` 时两边都是哈希夹具；真向量检索须设 `MARLOW_KB_EMBEDDINGS=real`（见 `evals/live/README.md`）。

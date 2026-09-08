@@ -16,7 +16,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--real",
         action="store_true",
-        help="Use OpenAI-compatible embeddings (XAI_API_KEY or OPENAI_API_KEY). Default is hash embeddings.",
+        help="Use OpenAI-compatible embeddings (JINA_API_KEY). Default is hash embeddings.",
     )
     args = parser.parse_args(argv)
     load_local_env()

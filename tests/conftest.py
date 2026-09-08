@@ -23,9 +23,11 @@ def _keep_pytest_on_fake_llm(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MARLOW_CHROMA_DIR", raising=False)
     monkeypatch.delenv("XAI_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("JINA_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     monkeypatch.delenv("MARLOW_KB_EMBEDDINGS", raising=False)
     monkeypatch.delenv("MARLOW_EMBEDDING_MODEL", raising=False)
+    monkeypatch.delenv("MARLOW_EMBEDDING_BASE_URL", raising=False)
 
 
 @pytest.fixture

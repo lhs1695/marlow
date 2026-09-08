@@ -66,6 +66,15 @@ def test_redact_covers_xai_prefix_and_env(monkeypatch) -> None:
     assert "[REDACTED]" in out
 
 
+def test_redact_covers_jina_prefix_and_env(monkeypatch) -> None:
+    monkeypatch.setenv("JINA_API_KEY", "jina_env-secret-value-zz")
+    text = "header jina_abcdefghijk leftover jina_env-secret-value-zz"
+    out = redact_secrets(text)
+    assert "jina_abcdefghijk" not in out
+    assert "jina_env-secret-value-zz" not in out
+    assert "[REDACTED]" in out
+
+
 def test_custom_base_url_requires_chat_model(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_BASE_URL", "https://example.invalid/v1")
     monkeypatch.delenv("MARLOW_CHAT_MODEL", raising=False)
@@ -75,10 +84,12 @@ def test_custom_base_url_requires_chat_model(monkeypatch) -> None:
         OpenAIActionProvider("hi", client=object())
 
 
-def test_source_does_not_hardcode_xai_host() -> None:
+def test_source_does_not_hardcode_provider_hosts() -> None:
     root = Path(__file__).resolve().parents[1] / "src"
     for path in root.rglob("*.py"):
-        assert "api.x.ai" not in path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
+        assert "api.x.ai" not in text
+        assert "api.jina.ai" not in text
 
 
 def test_observation_feedback_is_user_data_not_system() -> None:

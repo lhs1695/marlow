@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import os
+from typing import Any
 
 from langchain_core.embeddings import Embeddings
 
-from marlow.credentials import resolve_api_key
+from marlow.credentials import resolve_embedding_api_key
 
 _DIM = 64
 KB_EMBEDDINGS_ENV = "MARLOW_KB_EMBEDDINGS"
-_QUERY_PREFIX = "query: "
-_PASSAGE_PREFIX = "passage: "
+EMBEDDING_BASE_ENV = "MARLOW_EMBEDDING_BASE_URL"
+EMBEDDING_MODEL_ENV = "MARLOW_EMBEDDING_MODEL"
+TASK_QUERY = "retrieval.query"
+TASK_PASSAGE = "retrieval.passage"
 
 
 class HashTokenEmbeddings(Embeddings):
@@ -36,39 +39,67 @@ class HashTokenEmbeddings(Embeddings):
         return vec
 
 
-class QueryPassageEmbeddings(Embeddings):
-    """Official query/passage prefixes for real embeddings only. Does not change stored page_content."""
+class RetrievalTaskEmbeddings(Embeddings):
+    """Jina retrieval adapters via extra_body task. Does not change stored page_content."""
 
-    def __init__(self, inner: Embeddings) -> None:
-        self._inner = inner
+    def __init__(self, *, query: Embeddings, passage: Embeddings) -> None:
+        self._query = query
+        self._passage = passage
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return self._inner.embed_documents([_PASSAGE_PREFIX + text for text in texts])
+        return self._passage.embed_documents(texts)
 
     def embed_query(self, text: str) -> list[float]:
-        return self._inner.embed_query(_QUERY_PREFIX + text)
+        return self._query.embed_query(text)
 
 
-def _compat_client() -> Embeddings:
+class _OpenAICompatEmbeddings(Embeddings):
+    def __init__(self, *, client: Any, model: str, task: str) -> None:
+        self._client = client
+        self._model = model
+        self._task = task
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        response = self._client.embeddings.create(
+            model=self._model,
+            input=texts,
+            extra_body={"task": self._task},
+        )
+        rows = sorted(response.data, key=lambda item: int(getattr(item, "index", 0) or 0))
+        return [list(row.embedding) for row in rows]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.embed_documents([text])[0]
+
+
+def _make_embed_http_client() -> Any:
     try:
-        from langchain_openai import OpenAIEmbeddings
+        from openai import OpenAI
     except ImportError as exc:
-        raise RuntimeError("install openai extra (langchain-openai) for --real embeddings") from exc
-    api_key = resolve_api_key()
+        raise RuntimeError("install llm extra: uv sync --extra llm") from exc
+    api_key = resolve_embedding_api_key()
     if not api_key:
-        raise RuntimeError("XAI_API_KEY or OPENAI_API_KEY required for --real embeddings")
-    kwargs: dict[str, str] = {"api_key": api_key}
-    base = os.environ.get("OPENAI_BASE_URL")
-    if base:
-        kwargs["base_url"] = base
-    model = os.environ.get("MARLOW_EMBEDDING_MODEL")
-    if model:
-        kwargs["model"] = model
-    return OpenAIEmbeddings(**kwargs)
+        raise RuntimeError("JINA_API_KEY or OPENAI_API_KEY required for --real embeddings")
+    base = os.environ.get(EMBEDDING_BASE_ENV, "").strip()
+    if not base:
+        raise RuntimeError("MARLOW_EMBEDDING_BASE_URL must be set for real embeddings")
+    return OpenAI(api_key=api_key, base_url=base)
+
+
+def _compat_client(*, task: str) -> Embeddings:
+    model = os.environ.get(EMBEDDING_MODEL_ENV, "").strip()
+    if not model:
+        raise RuntimeError("MARLOW_EMBEDDING_MODEL must be set for real embeddings")
+    return _OpenAICompatEmbeddings(client=_make_embed_http_client(), model=model, task=task)
 
 
 def openai_compat_embeddings() -> Embeddings:
-    return QueryPassageEmbeddings(_compat_client())
+    return RetrievalTaskEmbeddings(
+        query=_compat_client(task=TASK_QUERY),
+        passage=_compat_client(task=TASK_PASSAGE),
+    )
 
 
 def resolve_kb_embeddings(*, real: bool = False) -> Embeddings:

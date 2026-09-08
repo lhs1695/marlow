@@ -1,4 +1,5 @@
 from langchain_core.embeddings import Embeddings
+import pytest
 
 from marlow.codes import KB_MISS, KB_VERSION_MISMATCH, STATUS_INVESTIGATING
 from marlow.engine import comment_count, start_run, ticket_status
@@ -106,28 +107,36 @@ def test_close_version_mismatch_does_not_resolve_via_slices(session) -> None:
     assert comment_count(session) == comments_before
 
 
-def test_openai_compat_embeddings_accepts_xai_key_only(monkeypatch) -> None:
-    import sys
-    from types import ModuleType
-
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setenv("XAI_API_KEY", "xai-only-key-aaaaaaaa")
+def test_openai_compat_embeddings_uses_jina_key_not_xai(monkeypatch) -> None:
     captured: dict[str, str] = {}
 
-    class FakeOpenAIEmbeddings:
+    class FakeOpenAI:
         def __init__(self, **kwargs: str) -> None:
             captured.update(kwargs)
 
-    existing = sys.modules.get("langchain_openai")
-    if existing is None:
-        mod = ModuleType("langchain_openai")
-        mod.OpenAIEmbeddings = FakeOpenAIEmbeddings  # type: ignore[attr-defined]
-        monkeypatch.setitem(sys.modules, "langchain_openai", mod)
-    else:
-        monkeypatch.setattr(existing, "OpenAIEmbeddings", FakeOpenAIEmbeddings)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("XAI_API_KEY", "xai-should-not-be-used")
+    monkeypatch.setenv("JINA_API_KEY", "jina_testkeyaaaaaaaa")
+    monkeypatch.setenv("MARLOW_EMBEDDING_BASE_URL", "https://example.invalid/v1")
+    monkeypatch.setenv("MARLOW_EMBEDDING_MODEL", "jina-embeddings-v3")
+    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
+    from marlow.kb.embeddings import _make_embed_http_client
 
-    openai_compat_embeddings()
-    assert captured["api_key"] == "xai-only-key-aaaaaaaa"
+    _make_embed_http_client()
+    assert captured["api_key"] == "jina_testkeyaaaaaaaa"
+    assert captured["base_url"] == "https://example.invalid/v1"
+
+
+def test_openai_compat_embeddings_rejects_xai_key_only(monkeypatch) -> None:
+    monkeypatch.delenv("JINA_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("XAI_API_KEY", "xai-only-key-aaaaaaaa")
+    monkeypatch.setenv("MARLOW_EMBEDDING_BASE_URL", "https://example.invalid/v1")
+    monkeypatch.setenv("MARLOW_EMBEDDING_MODEL", "jina-embeddings-v3")
+    from marlow.kb.embeddings import openai_compat_embeddings
+
+    with pytest.raises(RuntimeError, match="JINA_API_KEY"):
+        openai_compat_embeddings()
 
 
 def test_resolve_kb_embeddings_without_env_is_hash(monkeypatch) -> None:
@@ -195,35 +204,43 @@ def test_kb_main_real_uses_same_resolver(tmp_path, monkeypatch) -> None:
     assert queries
 
 
-def test_search_kb_real_backend_sends_query_prefix(tmp_path, monkeypatch) -> None:
+def test_search_kb_real_backend_sends_retrieval_task(tmp_path, monkeypatch) -> None:
     queries: list[str] = []
     documents: list[str] = []
+    tasks: list[tuple[str, str]] = []
 
     class Recorder(Embeddings):
-        def __init__(self) -> None:
+        def __init__(self, task: str) -> None:
+            self._task = task
             self._inner = HashTokenEmbeddings()
 
         def embed_documents(self, texts: list[str]) -> list[list[float]]:
+            tasks.append(("docs", self._task))
             documents.extend(texts)
             return self._inner.embed_documents(texts)
 
         def embed_query(self, text: str) -> list[float]:
+            tasks.append(("query", self._task))
             queries.append(text)
             return self._inner.embed_query(text)
 
-    recorder = Recorder()
     monkeypatch.setenv("MARLOW_KB_EMBEDDINGS", "real")
-    monkeypatch.setattr("marlow.kb.embeddings._compat_client", lambda: recorder)
+    monkeypatch.setattr(
+        "marlow.kb.embeddings._compat_client",
+        lambda *, task: Recorder(task),
+    )
     persist = tmp_path / "chroma"
     build_chroma(persist, embeddings=resolve_kb_embeddings())
     obs = search_kb(query="grafana login localhost", persist_directory=persist)
     assert obs.ok is True
     assert obs.untrusted is True
     assert queries
-    assert all(item.startswith("query: ") for item in queries)
     assert "grafana login localhost" in queries[0]
+    assert not queries[0].startswith("query: ")
     assert documents
-    assert all(item.startswith("passage: ") for item in documents)
+    assert all(not item.startswith("passage: ") for item in documents)
+    assert ("query", "retrieval.query") in tasks
+    assert ("docs", "retrieval.passage") in tasks
     for row in obs.data["hits"]:
         assert not row["text"].startswith("query: ")
         assert not row["text"].startswith("passage: ")
