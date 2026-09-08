@@ -6,14 +6,14 @@ IT 工单 Agent：L1 用自然语言调查 / 关单；改权限须人批。**通
 
 ```bash
 uv sync
-pytest
+uv run pytest
 ```
 
-CI 与日常开发默认 **Fake**（无 API Key）。
+CI 与日常开发默认 **Fake**（无 API Key）；有 Key 也不得让 `pytest` 打网。
 
 ## 非目标
 
-真 AD / Jira、多租户 SaaS、LangGraph 当 Run 循环、技能商店、多 Agent、微信 / X MCP 接进本仓工单环境、K8s、后训练、发邮件。Keyline 满编评测另计划；Compose 仅演示阶段。
+真 AD / Jira、多租户 SaaS、LangGraph 当 Run 循环、多供应商 SDK / Router、技能商店、多 Agent、微信 / X MCP 接进本仓工单环境、K8s、后训练、发邮件。Keyline 在 `evals/keyline/`（GHA 另 job）；Compose 仅演示阶段。
 
 ## 纪律
 

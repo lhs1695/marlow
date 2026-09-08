@@ -15,7 +15,7 @@ uv run python -m marlow.demo --case 1
 uv run python -m marlow.web
 ```
 
-打开 `http://127.0.0.1:8000/`。GitHub Actions 同一套 Fake（`.github/workflows/fake-eval.yml`）。仓库 Secrets **不配**模型 Key。
+打开 `http://127.0.0.1:8000/`。GitHub Actions（`.github/workflows/fake-eval.yml`）跑 Fake `pytest`，另有 `keyline` job。仓库 Secrets **不配**模型 Key。
 
 密钥只放本地 `.env`（不进 git）。真模型可选：`uv sync --extra llm` 后设 `OPENAI_API_KEY`（可设 `OPENAI_BASE_URL` / `MARLOW_CHAT_MODEL`），`uv run python -m marlow.demo --case 2 --real`。缺 Key 时 `--real` 自动 Fake。真模型报告写入 `evals/live/reports/`（gitignore），不进 CI。
 

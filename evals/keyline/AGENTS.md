@@ -7,11 +7,11 @@
 ## 测试
 
 ```bash
-playwright install chromium
-pytest evals/keyline
+uv run playwright install chromium
+uv run pytest evals/keyline
 ```
 
-跑任务时 Marlow Web 须已由同一 uv 环境拉起。无 API Key、无 LLM judge。Playwright 全绿但没查表，不算过。
+评测夹具自起临时 Web，不要另开 `python -m marlow.web`。无 API Key、无 LLM judge。Playwright 全绿但没查表，不算过。
 
 ## 非目标
 
