@@ -2,11 +2,12 @@ id: kl-06-iso-investigate
 login_role: l1
 start_path: /tickets/INC-1001
 expect_privilege_fail: false
-setup:
-  fake_run:
-    case_id: close_success
-    user_text: 请调查 INC-1001 并关单
 steps:
+  - action: fill
+    testid: chat-input
+    text: 请调查 INC-1001 并关单
+  - action: click
+    testid: chat-submit
   - action: expect_testid
     testid: ticket-id
     text: INC-1001
@@ -33,6 +34,7 @@ expect:
   db:
     session_role: l1
     freeze_entitlements: true
+    min_comment_delta: 1
     ticket:
       id: INC-1001
       status: Resolved

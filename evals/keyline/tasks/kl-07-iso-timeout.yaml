@@ -3,6 +3,11 @@ login_role: l1
 start_path: /tickets/INC-1005
 expect_privilege_fail: false
 steps:
+  - action: fill
+    testid: chat-input
+    text: 读取 INC-1005 的资产配置
+  - action: click
+    testid: chat-submit
   - action: expect_testid
     testid: ticket-id
     text: INC-1005
@@ -26,3 +31,6 @@ expect:
   db:
     session_role: l1
     freeze_entitlements: true
+    ticket:
+      id: INC-1005
+      status: Investigating

@@ -20,8 +20,6 @@ from keyline.db_scorer import (
 )
 from keyline.load import load_task_by_id, load_tasks
 from keyline.playwright_solver import solve_task
-from marlow.engine import start_run
-from marlow.fake import provider_for_case
 from marlow.seed import ADMIN_ID, L1_ID
 
 _ROLE_ACTOR = {"l1": L1_ID, "admin": ADMIN_ID}
@@ -67,23 +65,7 @@ def evaluate_task(
     )
 
 
-def _apply_setup(engine: Engine, task: dict[str, Any]) -> None:
-    fake = (task.get("setup") or {}).get("fake_run")
-    if not fake:
-        return
-    with Session(engine) as db:
-        start_run(
-            db,
-            actor_id=_ROLE_ACTOR[task["login_role"]],
-            user_text=fake["user_text"],
-            case_id=fake["case_id"],
-            provider=provider_for_case(fake["case_id"]),
-        )
-        db.commit()
-
-
 def run_task(task: dict[str, Any], page: Any, base_url: str, engine: Engine) -> ScoreResult:
-    _apply_setup(engine, task)
     with Session(engine) as db:
         baseline_entitlements = snapshot_entitlements(db)
         baseline_approvals = snapshot_approvals(db)

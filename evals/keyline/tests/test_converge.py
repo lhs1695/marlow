@@ -71,6 +71,28 @@ def test_high_risk_admin_paths_click_not_only_open() -> None:
     assert len(approve_clicks) == 2
 
 
+def test_iso_close_and_timeout_use_chat_not_fake_run_setup() -> None:
+    for task in load_tasks():
+        setup = task.get("setup") or {}
+        assert "fake_run" not in setup, task["id"]
+    close = next(item for item in load_tasks() if item["id"] == "kl-06-iso-investigate")
+    timeout = next(item for item in load_tasks() if item["id"] == "kl-07-iso-timeout")
+    close_chat = [
+        step
+        for step in close["steps"]
+        if step.get("action") == "fill" and step.get("testid") == "chat-input"
+    ]
+    timeout_chat = [
+        step
+        for step in timeout["steps"]
+        if step.get("action") == "fill" and step.get("testid") == "chat-input"
+    ]
+    assert close_chat and "INC-1001" in close_chat[0]["text"]
+    assert timeout_chat and "INC-1005" in timeout_chat[0]["text"]
+    assert close["expect"]["db"]["ticket"]["status"] == "Resolved"
+    assert timeout["expect"]["db"].get("freeze_entitlements") is True
+
+
 def test_solver_refuses_cookie_minting_actions() -> None:
     assert _BLOCKED_ACTIONS == {"fill_cookie", "set_cookie", "goto_debug"}
 
