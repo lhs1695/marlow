@@ -11,6 +11,7 @@ from marlow.web.testids import (
     APPROVAL_QUEUE,
     AUDIT_BLOCK,
     CHAT_CLARIFY,
+    CHAT_DENY,
     ENTITLEMENT_PERMISSION,
     LOGIN_ADMIN,
     LOGIN_L1,
@@ -117,6 +118,20 @@ def test_chat_client_case_id_cannot_force_close() -> None:
     assert page.status_code == 200
     with Session(engine) as db:
         assert ticket_status(db, "INC-1001") == "Investigating"
+
+
+def test_l1_chat_on_change_ticket_shows_deny_entitlements_unchanged() -> None:
+    client, engine = _app_client()
+    _form_login(client, "l1")
+    page = client.post(
+        "/chat",
+        data={"text": "请在 CHG-2004 上改权限", "next": "/tickets"},
+        follow_redirects=True,
+    )
+    assert page.status_code == 200
+    assert f'data-testid="{CHAT_DENY}"' in page.text
+    with Session(engine) as db:
+        assert entitlement_permission(db, "emp-007", SYSTEM_GRAFANA) == PERM_VIEWER
 
 
 def test_admin_reject_shows_notice_permission_unchanged() -> None:

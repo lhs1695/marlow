@@ -126,6 +126,19 @@ def test_max_steps_does_not_close_ticket(session) -> None:
     assert "未关单" in (run.final_answer or "")
 
 
+def test_investigate_uses_extracted_ticket_id_and_l1_cannot_read_change(session) -> None:
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="请调查 CHG-2004",
+        case_id="investigate",
+        provider=provider_for_case("investigate"),
+    )
+    session.flush()
+    assert run.outcome_code == UNAUTHORIZED
+    assert entitlement_permission(session, "emp-007", SYSTEM_GRAFANA) == PERM_VIEWER
+
+
 def test_demo_five_segments_fake(capsys, monkeypatch) -> None:
     from marlow.demo import main
 

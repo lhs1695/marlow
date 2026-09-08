@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 from marlow.actions import Action, answer, skill, tool
@@ -45,6 +45,8 @@ class ScriptProvider:
             return answer()
         item = self.script[self._index]
         self._index += 1
+        if ticket_id and item.arguments and "ticket_id" in item.arguments:
+            return replace(item, arguments={**item.arguments, "ticket_id": ticket_id})
         return item
 
 
