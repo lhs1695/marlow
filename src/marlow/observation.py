@@ -14,6 +14,10 @@ class Observation:
     untrusted: bool
     data: dict[str, Any] | None = None
 
+    def __post_init__(self) -> None:
+        if not self.untrusted:
+            object.__setattr__(self, "untrusted", True)
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,

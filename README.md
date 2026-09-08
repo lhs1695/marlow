@@ -56,9 +56,27 @@ uv run python -m marlow.demo --case 1
 
 ## 阶段
 
-当前：**阶段 10** — Compose 演示 + README 与真实命令对齐。日常仍 `uv sync` / `uv run pytest`。
+当前：**阶段 11** — 对照规格收口。日常仍 `uv sync` / `uv run pytest`。无 Key 跑 Fake 评测与演示五段。
 
-登录后四页 + 对话条。`data-testid` 见 `src/marlow/web/testids.py`。
+登录后四页 + 对话条（对话是同步收口；步骤流见 CLI 事件或 `GET /api/runs/{id}/events`）。`data-testid` 见 `src/marlow/web/testids.py`。
+
+## 模块（面试可指到文件）
+
+按变化轴分，不是一节点一包：
+
+| 会变的东西 | 落点 |
+| --- | --- |
+| 工单 / 权限表与种子 | `src/marlow/models.py` `db.py` `seed.py` |
+| 写 entitlements | `src/marlow/gateway.py`（Web / MCP / 工具同一函数） |
+| 六个工具短码 | `src/marlow/tools/`；MCP 薄壳 `ticket_mcp.py` |
+| 四个 Skill 骨架 | `src/marlow/skills/` |
+| Run 状态机 | `src/marlow/engine.py`；Fake `fake.py` |
+| 真模型适配 | `src/marlow/llm.py` |
+| 手册切片 / 版本 | `src/marlow/kb/`；CI 夹具不打 Embedding |
+| Session 与四页 | `src/marlow/web/` |
+| 冻结 Fake 评测 | `tests/test_eval_frozen.py` |
+
+权检不在 prompt：角色来自 Cookie Session + `employees.role`，网关按 actor 落库。Observation 一律 `untrusted`。
 
 演示账号（角色只来自服务端 Session，忽略 `?role=`）：
 

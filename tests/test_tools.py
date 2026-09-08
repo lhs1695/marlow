@@ -13,6 +13,7 @@ from marlow.codes import (
 )
 from marlow.faults import FAULT_HTTP_200_BUSINESS_FAIL, FAULT_TIMEOUT, FaultHooks
 from marlow.gateway import entitlement_permission
+from marlow.observation import Observation
 from marlow.seed import ADMIN_ID, INJECTION_COMMENT, L1_ID
 from marlow.tools import (
     TOOL_NAMES,
@@ -22,6 +23,11 @@ from marlow.tools import (
     search_kb,
     search_tickets,
 )
+
+
+def test_observation_cannot_be_trusted() -> None:
+    obs = Observation(ok=True, code="ok", retryable=False, untrusted=False)
+    assert obs.untrusted is True
 
 
 def test_get_ticket_missing_is_not_retryable(session) -> None:
