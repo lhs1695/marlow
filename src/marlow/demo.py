@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import datetime as dt
-import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +21,8 @@ from marlow.db import make_engine, prepare_database
 from marlow.engine import start_run, ticket_status
 from marlow.faults import FAULT_TIMEOUT, FaultHooks
 from marlow.gateway import apply_entitlement_change, entitlement_permission
-from marlow.llm import has_api_key, redact_secrets, write_live_report
+from marlow.live import live_run_record
+from marlow.llm import OpenAIActionProvider, has_api_key, redact_secrets, write_live_report
 from marlow.models import RunEvent
 from marlow.seed import ADMIN_ID, L1_ID
 
@@ -35,34 +35,49 @@ DEMO_CASES: dict[int, dict[str, str]] = {
 }
 
 
-def run_demo_case(session: Session, case: int, *, real: bool = False) -> dict[str, Any] | None:
+def run_demo_case(
+    session: Session,
+    case: int,
+    *,
+    real: bool = False,
+    llm_client: Any | None = None,
+    verbose: bool = True,
+) -> dict[str, Any] | None:
     spec = DEMO_CASES[case]
     case_id = spec["case_id"]
     faults = FaultHooks()
     if case_id == "timeout":
         faults.set_target("get_asset", "ast-laptop-casey", FAULT_TIMEOUT)
-    used_openai = bool(real and has_api_key())
-    if real and not has_api_key():
-        print("provider=fake fallback=missing_api_key")
-    elif used_openai:
-        print("provider=openai")
-    else:
-        print("provider=fake")
+    used_openai = bool(real and (llm_client is not None or has_api_key()))
+    if verbose:
+        if real and not used_openai:
+            print("provider=fake fallback=missing_api_key")
+        elif used_openai:
+            print("provider=openai")
+        else:
+            print("provider=fake")
+    provider = OpenAIActionProvider(spec["text"], client=llm_client) if used_openai else None
+    started = time.perf_counter()
     run = start_run(
         session,
         actor_id=L1_ID,
         user_text=spec["text"],
         case_id=case_id,
         faults=faults,
+        provider=provider,
         real=real,
+        llm_client=None if provider is not None else llm_client,
     )
-    print(f"run_id={run.id} status={run.status} code={run.outcome_code}")
-    print(f"answer={redact_secrets(run.final_answer or '')}")
-    events = session.scalars(select(RunEvent).where(RunEvent.run_id == run.id).order_by(RunEvent.id))
-    for event in events:
-        print(f"event {event.kind} {redact_secrets(event.payload)}")
-    if case == 2:
-        print(f"ticket_status={ticket_status(session, 'INC-1001')}")
+    latency_ms = (time.perf_counter() - started) * 1000.0
+    if verbose:
+        print(f"run_id={run.id} status={run.status} code={run.outcome_code}")
+        print(f"answer={redact_secrets(run.final_answer or '')}")
+        events = session.scalars(select(RunEvent).where(RunEvent.run_id == run.id).order_by(RunEvent.id))
+        for event in events:
+            print(f"event {event.kind} {redact_secrets(event.payload)}")
+        if case == 2:
+            print(f"ticket_status={ticket_status(session, 'INC-1001')}")
+    extra: dict[str, Any] = {}
     if case == 4:
         result = apply_entitlement_change(
             session,
@@ -75,32 +90,20 @@ def run_demo_case(session: Session, case: int, *, real: bool = False) -> dict[st
             idempotency_key="demo-case4-reject",
         )
         after = entitlement_permission(session, "emp-006", SYSTEM_GRAFANA)
-        print(f"admin_reject code={result.code} emp-006={after}")
+        extra = {"admin_reject_code": result.code, "emp-006": after}
+        if verbose:
+            print(f"admin_reject code={result.code} emp-006={after}")
     if not used_openai:
         return None
-    return {
-        "date": dt.date.today().isoformat(),
-        "model": _model_from_events(session, run.id),
-        "case": case,
-        "case_id": case_id,
-        "outcome_code": run.outcome_code,
-        "status": run.status,
-        "ticket_id": run.ticket_id,
-        "ticket_status": ticket_status(session, run.ticket_id) if run.ticket_id else None,
-        "final_answer": run.final_answer,
-    }
-
-
-def _model_from_events(session: Session, run_id: str) -> str:
-    rows = session.scalars(select(RunEvent).where(RunEvent.run_id == run_id, RunEvent.kind == "llm"))
-    for row in rows:
-        try:
-            payload = json.loads(row.payload)
-        except json.JSONDecodeError:
-            continue
-        if payload.get("model"):
-            return str(payload["model"])
-    return ""
+    return live_run_record(
+        session,
+        case=case,
+        case_id=case_id,
+        run=run,
+        latency_ms=latency_ms,
+        provider=provider,
+        extra=extra,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -115,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        help="Write a live-model report JSON (gitignored). Not used in CI.",
+        help="Write one live run JSON (no p50). For n=10 p50/p95 use python -m marlow.live.",
     )
     args = parser.parse_args(argv)
     load_local_env()
@@ -127,6 +130,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.report and report is not None:
             write_live_report(args.report, report)
             print(f"report={args.report}")
+            print("p50/p95: python -m marlow.live")
         elif args.report and report is None:
             print("report skipped (not a live OpenAI run)")
     return 0

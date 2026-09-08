@@ -196,6 +196,8 @@ def bind_provider(
     client: Any | None = None,
 ) -> tuple[ActionProvider, dict[str, str]]:
     if provider is not None:
+        if isinstance(provider, OpenAIActionProvider):
+            return provider, {"provider": "openai", "model": provider.model}
         return provider, {"provider": "explicit"}
     if real and (client is not None or has_api_key()):
         llm = OpenAIActionProvider(user_text, client=client)

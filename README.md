@@ -17,7 +17,7 @@ uv run python -m marlow.web
 
 打开 `http://127.0.0.1:8000/`。GitHub Actions（`.github/workflows/fake-eval.yml`）跑 Fake `pytest`，另有 `keyline` job。仓库 Secrets **不配**模型 Key。
 
-密钥只放本地 `.env`（不进 git，对照 `.env.example`）。演示档案是 **xAI 聊天 + Jina 向量**：`XAI_API_KEY`（无则回退 `OPENAI_API_KEY`）配 `OPENAI_BASE_URL` / `MARLOW_CHAT_MODEL`；向量用 `JINA_API_KEY`、`MARLOW_EMBEDDING_BASE_URL`、`MARLOW_EMBEDDING_MODEL`。**host 不进源代码**。CI 与 `uv run pytest` 仍 Fake，仓库 Secrets **不配**模型 Key。真模型：`uv sync --extra llm` 后 `uv run python -m marlow.demo --case 2 --real`。缺聊天 Key 时 `--real` 自动 Fake。报告写入 `evals/live/reports/`（gitignore），不进 CI。
+密钥只放本地 `.env`（不进 git，对照 `.env.example`）。演示档案是 **xAI 聊天 + Jina 向量**：`XAI_API_KEY`（无则回退 `OPENAI_API_KEY`）配 `OPENAI_BASE_URL` / `MARLOW_CHAT_MODEL`；向量用 `JINA_API_KEY`、`MARLOW_EMBEDDING_BASE_URL`、`MARLOW_EMBEDDING_MODEL`。**host 不进源代码**。CI 与 `uv run pytest` 仍 Fake，仓库 Secrets **不配**模型 Key。真模型：`uv sync --extra llm` 后 `uv run python -m marlow.demo --case 2 --real`。缺聊天 Key 时 `--real` 自动 Fake。p50/p95/token：`uv run python -m marlow.live`（case 2 × 10），报告写入 `evals/live/reports/`（gitignore），不进 CI、不进默认 `pytest`。
 
 手册钉 **Grafana 10.4**（文档取自 git tag `v10.4.3`，获取日期 **2026-09-07**），原文在 `handbook/grafana-10.4/`。CI / 默认 `search_kb` 对切片做固定检索夹具，**不打**真实 Embedding。本地可选建 Chroma 目录（gitignored）：哈希用 `chroma/`，真向量用独立的 `chroma-jina/`，不要混、不要覆盖。
 
