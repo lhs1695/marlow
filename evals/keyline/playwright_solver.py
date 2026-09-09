@@ -114,7 +114,7 @@ def _run_step(page: Page, base_url: str, step: dict[str, Any]) -> None:
                 f'[data-testid="approval-item"][data-ticket-id="{ticket_id}"]'
             ).get_by_test_id(step["testid"])
         loc.click()
-        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_load_state("load")
         return
     if action == "expect_absent_text":
         body = page.content()

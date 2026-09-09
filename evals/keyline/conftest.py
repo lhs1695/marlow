@@ -37,10 +37,13 @@ def session() -> Iterator[Session]:
 
 
 @pytest.fixture
-def live_app() -> Iterator[dict[str, Any]]:
+def live_app(tmp_path: Path) -> Iterator[dict[str, Any]]:
     import uvicorn
 
-    engine = make_engine("sqlite:///:memory:")
+    # File-backed SQLite: :memory: + StaticPool shares one connection across the
+    # uvicorn thread and the scorer, so a 303 GET can see an uncommitted POST.
+    db_path = tmp_path / "keyline.db"
+    engine = make_engine("sqlite:///" + db_path.resolve().as_posix())
     prepare_database(engine)
     app = create_app(engine)
     port = _free_port()

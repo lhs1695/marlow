@@ -153,6 +153,7 @@ def create_app(
             faults=http_fake_faults(text),
             real=want_real_llm(),
         )
+        db.commit()
         return {
             "run_id": run.id,
             "request_id": run.request_id,
@@ -204,6 +205,7 @@ def create_app(
         if not result.ok:
             status = 403 if result.code == UNAUTHORIZED else 400
             raise HTTPException(status_code=status, detail=result.code)
+        db.commit()
         return {"ok": result.ok, "code": result.code}
 
     return app

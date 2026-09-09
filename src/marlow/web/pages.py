@@ -106,6 +106,7 @@ def register_pages(app: FastAPI) -> None:
         if not result.ok:
             status = 403 if result.code == UNAUTHORIZED else 400
             raise HTTPException(status_code=status, detail=result.code)
+        db.commit()
         return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
 
     @app.get("/approvals")
@@ -147,6 +148,7 @@ def register_pages(app: FastAPI) -> None:
         if not result.ok:
             status = 403 if result.code == UNAUTHORIZED else 400
             raise HTTPException(status_code=status, detail=result.code)
+        db.commit()
         return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
 
     @app.post("/chat")
@@ -174,4 +176,5 @@ def register_pages(app: FastAPI) -> None:
             request.session["chat_deny"] = run.final_answer or ""
         else:
             request.session["chat_answer"] = run.final_answer or ""
+        db.commit()
         return RedirectResponse(nxt, status_code=303)
