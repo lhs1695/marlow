@@ -197,6 +197,38 @@ def test_l1_cannot_open_approvals_or_change_detail() -> None:
     assert post.status_code == 403
 
 
+def test_admin_new_change_ticket_has_no_decision_buttons() -> None:
+    client, _engine = _app_client()
+    _form_login(client, "admin")
+    seeded_new = client.get("/tickets/CHG-2001")
+    assert seeded_new.status_code == 200
+    assert f'data-testid="{APPROVAL_APPROVE}"' not in seeded_new.text
+    waiting = client.get("/tickets/CHG-2004")
+    assert waiting.status_code == 200
+    assert f'data-testid="{APPROVAL_APPROVE}"' in waiting.text
+
+
+def test_chat_keeps_run_id_after_another_get() -> None:
+    client, _engine = _app_client()
+    _form_login(client, "l1")
+    client.post(
+        "/chat",
+        data={"text": "Grafana 登录有问题，帮我看看", "next": "/tickets"},
+        follow_redirects=True,
+    )
+    again = client.get("/tickets")
+    assert f'data-testid="{CHAT_CLARIFY}"' in again.text
+    assert "run_id=" in again.text
+    assert "/api/runs/" in again.text
+
+
+def test_static_css_is_served() -> None:
+    client, _engine = _app_client()
+    css = client.get("/static/app.css")
+    assert css.status_code == 200
+    assert "--accent" in css.text
+
+
 def test_l1_can_add_comment_on_incident() -> None:
     client, engine = _app_client()
     _form_login(client, "l1")

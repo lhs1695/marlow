@@ -29,20 +29,50 @@ from marlow.models import AuditEvent, Ticket
 from marlow.tools.tickets import get_ticket, search_tickets
 from marlow.web.auth import SESSION_ACTOR_KEY, actor_from_session
 from marlow.web.deps import Db, enforce_limit
+from marlow.web.display import (
+    DEMO_FOCUS_IDS,
+    queue_zh,
+    role_zh,
+    show_change_decisions,
+    status_tone,
+    status_zh,
+)
 from marlow.web.limits import MAX_INPUT_CHARS
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+TEMPLATES.env.globals.update(
+    role_zh=role_zh,
+    queue_zh=queue_zh,
+    status_zh=status_zh,
+    status_tone=status_tone,
+)
+
+_CHAT_SESSION_KEYS = (
+    "chat_clarify",
+    "chat_deny",
+    "chat_answer",
+    "chat_run_id",
+    "chat_run_status",
+    "chat_outcome",
+    "chat_text",
+)
 
 
 def _page_ctx(request: Request, actor, **extra):
-    claim = request.query_params.get("role") or actor.role
+    query_role = request.query_params.get("role")
     return {
         "request": request,
         "actor": actor,
-        "page_claim": claim,
-        "chat_clarify": request.session.pop("chat_clarify", None),
-        "chat_deny": request.session.pop("chat_deny", None),
-        "chat_answer": request.session.pop("chat_answer", None),
+        "query_role": query_role,
+        "claim_mismatch": bool(query_role) and query_role != actor.role,
+        "demo_focus_ids": DEMO_FOCUS_IDS,
+        "chat_clarify": request.session.get("chat_clarify"),
+        "chat_deny": request.session.get("chat_deny"),
+        "chat_answer": request.session.get("chat_answer"),
+        "chat_run_id": request.session.get("chat_run_id"),
+        "chat_run_status": request.session.get("chat_run_status"),
+        "chat_outcome": request.session.get("chat_outcome"),
+        "chat_text": request.session.get("chat_text"),
         **extra,
     }
 
@@ -82,6 +112,11 @@ def register_pages(app: FastAPI) -> None:
             )
         )
         permission = entitlement_permission(db, ticket["requester_id"], SYSTEM_GRAFANA)
+        can_decide = show_change_decisions(
+            role=actor.role,
+            queue=ticket["queue"],
+            status=ticket["status"],
+        )
         return TEMPLATES.TemplateResponse(
             request,
             "ticket_detail.html",
@@ -92,6 +127,7 @@ def register_pages(app: FastAPI) -> None:
                 comments=comments,
                 audits=audits,
                 permission=permission,
+                can_decide=can_decide,
             ),
         )
 
@@ -170,6 +206,12 @@ def register_pages(app: FastAPI) -> None:
             faults=http_fake_faults(text),
             real=want_real_llm(),
         )
+        for key in _CHAT_SESSION_KEYS:
+            request.session.pop(key, None)
+        request.session["chat_run_id"] = run.id
+        request.session["chat_run_status"] = run.status
+        request.session["chat_outcome"] = run.outcome_code or ""
+        request.session["chat_text"] = text
         if run.outcome_code == NOT_ENOUGH_INFO:
             request.session["chat_clarify"] = run.final_answer or ""
         elif run.outcome_code == UNAUTHORIZED:

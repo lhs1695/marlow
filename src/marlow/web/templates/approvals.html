@@ -1,19 +1,31 @@
 {% extends "base.html" %}
 {% block title %}审批队列 — Marlow{% endblock %}
 {% block body %}
-<h1>管理员审批队列</h1>
-<ul data-testid="approval-queue">
+<h1 class="page-title">管理员审批队列</h1>
+<p class="lede">只列出待批变更。拒绝 CHG-2003 时 emp-006 仍为 Viewer；批准 CHG-2004 时 emp-007 变为 Editor。</p>
+<ul data-testid="approval-queue" class="stack" style="list-style:none;padding:0">
   {% for t in tickets %}
-  <li data-testid="approval-item" data-ticket-id="{{ t.id }}">
-    <a href="/tickets/{{ t.id }}">{{ t.id }}</a>
-    {{ t.title }} · {{ t.status }}
-    <form method="post" action="/approvals" style="display:inline">
-      <input type="hidden" name="ticket_id" value="{{ t.id }}">
-      <input type="hidden" name="target_employee_id" value="{{ t.requester_id }}">
-      <button type="submit" name="decision" value="approve" data-testid="approval-approve">批准</button>
-      <button type="submit" name="decision" value="reject" data-testid="approval-reject">拒绝</button>
-    </form>
+  <li class="card" data-testid="approval-item" data-ticket-id="{{ t.id }}">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div>
+        <a class="mono" href="/tickets/{{ t.id }}">{{ t.id }}</a>
+        {% if t.id in demo_focus_ids %}<span class="pill-demo">演示</span>{% endif %}
+        <div>{{ t.title }}</div>
+        <div class="claim-zh">
+          <span class="badge tone-{{ status_tone(t.status) }}">{{ t.status }} · {{ status_zh(t.status) }}</span>
+          请求人 {{ t.requester_id }}
+        </div>
+      </div>
+      <form method="post" action="/approvals" class="row">
+        <input type="hidden" name="ticket_id" value="{{ t.id }}">
+        <input type="hidden" name="target_employee_id" value="{{ t.requester_id }}">
+        <button type="submit" name="decision" value="approve" data-testid="approval-approve">批准</button>
+        <button type="submit" name="decision" value="reject" class="danger" data-testid="approval-reject">拒绝</button>
+      </form>
+    </div>
   </li>
+  {% else %}
+  <li class="card empty">没有待批变更。已处理的单请到工单详情看状态和权限。</li>
   {% endfor %}
 </ul>
 {% endblock %}

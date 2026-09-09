@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -33,6 +34,24 @@ DEMO_CASES: dict[int, dict[str, str]] = {
     4: {"case_id": "change_hitl", "text": "工单 CHG-2004 申请给 emp-007 加 Grafana Editor"},
     5: {"case_id": "l1_deny", "text": "在 CHG-2004 上直接改权限"},
 }
+
+_EVENT_KEYS = ("code", "ticket_id", "skill", "name", "tool", "outcome", "status")
+
+
+def _event_line(kind: str, payload: str) -> str:
+    raw = redact_secrets(payload)
+    try:
+        data = json.loads(payload) if payload else {}
+    except json.JSONDecodeError:
+        return f"{kind}\t{raw}"
+    if not isinstance(data, dict):
+        return f"{kind}\t{raw}"
+    parts = [kind]
+    for key in _EVENT_KEYS:
+        value = data.get(key)
+        if value not in (None, ""):
+            parts.append(f"{key}={value}")
+    return "\t".join(str(part) for part in parts)
 
 
 def run_demo_case(
@@ -72,9 +91,10 @@ def run_demo_case(
     if verbose:
         print(f"run_id={run.id} status={run.status} code={run.outcome_code}")
         print(f"answer={redact_secrets(run.final_answer or '')}")
+        print("kind\tfields")
         events = session.scalars(select(RunEvent).where(RunEvent.run_id == run.id).order_by(RunEvent.id))
         for event in events:
-            print(f"event {event.kind} {redact_secrets(event.payload)}")
+            print(_event_line(event.kind, event.payload))
         if case == 2:
             print(f"ticket_status={ticket_status(session, 'INC-1001')}")
     extra: dict[str, Any] = {}
@@ -92,7 +112,9 @@ def run_demo_case(
         after = entitlement_permission(session, "emp-006", SYSTEM_GRAFANA)
         extra = {"admin_reject_code": result.code, "emp-006": after}
         if verbose:
-            print(f"admin_reject code={result.code} emp-006={after}")
+            print(f"admin_reject code={result.code} ticket=CHG-2003 emp-006={after}")
+            print("reject path=CHG-2003/emp-006 (entitlements stay Viewer)")
+            print("approve path=CHG-2004/emp-007 — admin clicks /approvals; this CLI does not approve")
     if not used_openai:
         return None
     return live_run_record(

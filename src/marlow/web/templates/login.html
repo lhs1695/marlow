@@ -2,25 +2,39 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>登录 — Marlow</title>
-  <style>
-    body { font-family: sans-serif; margin: 2rem; max-width: 32rem; }
-    form { margin: 1rem 0; }
-    button { font: inherit; margin-right: 0.5rem; padding: 0.4rem 0.8rem; }
-  </style>
+  <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <h1>Marlow 演示登录</h1>
-  <p>选择演示账号。角色只来自服务端 Session，不能用查询参数覆盖。</p>
-  <form method="post" action="/login">
-    <input type="hidden" name="account" value="l1">
-    <input type="hidden" name="password" value="l1-demo">
-    <button type="submit" data-testid="login-l1">以 L1 登录</button>
-  </form>
-  <form method="post" action="/login">
-    <input type="hidden" name="account" value="admin">
-    <input type="hidden" name="password" value="admin-demo">
-    <button type="submit" data-testid="login-admin">以管理员登录</button>
-  </form>
+  <div class="shell">
+    <section class="card login-hero">
+      <h1>Marlow</h1>
+      <p class="lede">一线用自然语言调查 / 关单；改 Grafana 权限必须人批。模型说成功不算数，通过条件是工单库终态和审计。</p>
+      <p class="lede">角色只来自服务端 Session，不能用查询参数覆盖。</p>
+      <div class="login-actions">
+        <form method="post" action="/login">
+          <input type="hidden" name="account" value="l1">
+          <input type="hidden" name="password" value="l1-demo">
+          <button type="submit" data-testid="login-l1">以一线登录</button>
+        </form>
+        <form method="post" action="/login">
+          <input type="hidden" name="account" value="admin">
+          <input type="hidden" name="password" value="admin-demo">
+          <button type="submit" class="ghost" data-testid="login-admin">以管理员登录</button>
+        </form>
+      </div>
+    </section>
+    <section class="card">
+      <h2>演示五段（Fake，无 Key）</h2>
+      <ol class="examples">
+        <li>澄清：<code>Grafana 登录有问题，帮我看看</code></li>
+        <li>调查并关单：<code>请调查 INC-1001 并关单</code></li>
+        <li>超时降级：<code>读取 INC-1005 的资产配置</code></li>
+        <li>变更待批：<code>工单 CHG-2004 申请给 emp-007 加 Grafana Editor</code>（拒绝对照 CHG-2003；同意在本页批 CHG-2004）</li>
+        <li>一线越权：<code>在 CHG-2004 上直接改权限</code></li>
+      </ol>
+    </section>
+  </div>
 </body>
 </html>
