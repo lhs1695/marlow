@@ -26,7 +26,7 @@ def visible_queues(role: str) -> frozenset[str] | None:
 def _actor_or_deny(session: Session, actor_id: str) -> tuple[Employee | None, Observation | None]:
     actor = session.get(Employee, actor_id)
     if actor is None or visible_queues(actor.role) is None:
-        return None, Observation(ok=False, code=UNAUTHORIZED, retryable=False, untrusted=True)
+        return None, Observation(ok=False, code=UNAUTHORIZED, retryable=False)
     return actor, None
 
 
@@ -41,12 +41,11 @@ def get_ticket(session: Session, *, actor_id: str, ticket_id: str) -> Observatio
             ok=False,
             code=TICKET_NOT_FOUND,
             retryable=False,
-            untrusted=True,
         )
     queues = visible_queues(actor.role)
     assert queues is not None
     if ticket.queue not in queues:
-        return Observation(ok=False, code=UNAUTHORIZED, retryable=False, untrusted=True)
+        return Observation(ok=False, code=UNAUTHORIZED, retryable=False)
     comments = list(
         session.scalars(select(TicketComment).where(TicketComment.ticket_id == ticket.id))
     )
@@ -54,7 +53,6 @@ def get_ticket(session: Session, *, actor_id: str, ticket_id: str) -> Observatio
         ok=True,
         code="ok",
         retryable=False,
-        untrusted=True,
         data={
             "ticket": {
                 "id": ticket.id,
@@ -103,7 +101,6 @@ def search_tickets(
         ok=True,
         code="ok",
         retryable=False,
-        untrusted=True,
         data={
             "tickets": [
                 {

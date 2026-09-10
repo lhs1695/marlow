@@ -13,6 +13,9 @@ KB_VERSION_MISMATCH = "kb_version_mismatch"
 MAX_STEPS = "max_steps"
 APPROVAL_REQUIRED = "approval_required"
 
+SOURCE_TRUST_INTERNAL_GATEWAY = "internal_gateway"
+SOURCE_TRUST_UNTRUSTED_WEB_CONTENT = "untrusted_web_content"
+
 MAX_STEPS_LIMIT = 12
 MAX_TOKENS_LIMIT = 50_000
 MAX_COST_CENTS_LIMIT = 500

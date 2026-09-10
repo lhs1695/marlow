@@ -24,7 +24,6 @@ def add_ticket_comment(
         ok=result.ok,
         code=result.code,
         retryable=False,
-        untrusted=True,
         data=None
         if not result.ok
         else {"comment_id": result.comment_id, "body": result.body},
@@ -56,5 +55,4 @@ def apply_entitlement_change(
         ok=result.ok,
         code=result.code,
         retryable=False,
-        untrusted=True,
     )

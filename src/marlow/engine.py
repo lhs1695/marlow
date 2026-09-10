@@ -462,7 +462,7 @@ def _call_tool(
         ok=obs.ok,
         code=obs.code,
         retryable=obs.retryable,
-        untrusted=obs.untrusted,
+        source_trust=obs.source_trust,
     )
     _set_status(session, run, RUN_RUNNING)
     return obs

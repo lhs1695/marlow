@@ -21,7 +21,7 @@ from marlow.observation import Observation
 
 @dataclass
 class StepFeedback:
-    """Engine → provider: last Action outcome. Observations stay untrusted data."""
+    """Engine → provider: last Action outcome. Tool observations stay untrusted_web_content."""
 
     action: Action
     observation: Observation | None = None

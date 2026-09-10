@@ -12,6 +12,7 @@ from typing import Any, Protocol
 from mcp import Client, StdioServerParameters
 from sqlalchemy.orm import Session
 
+from marlow.codes import SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
 from marlow.db import _is_sqlite_memory
 from marlow.faults import FaultHooks
 from marlow.observation import Observation
@@ -161,6 +162,6 @@ def _observation_from_mcp(result: Any) -> Observation:
         ok=bool(payload["ok"]),
         code=str(payload["code"]),
         retryable=bool(payload["retryable"]),
-        untrusted=True,
+        source_trust=str(payload.get("source_trust") or SOURCE_TRUST_UNTRUSTED_WEB_CONTENT),
         data=payload.get("data"),
     )

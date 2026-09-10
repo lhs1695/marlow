@@ -35,14 +35,12 @@ class FaultHooks:
                 ok=False,
                 code=RETRYABLE_TIMEOUT,
                 retryable=True,
-                untrusted=True,
             )
         if kind == FAULT_HTTP_200_BUSINESS_FAIL:
             return Observation(
                 ok=False,
                 code=NON_RETRYABLE,
                 retryable=False,
-                untrusted=True,
                 data={"http_status": 200},
             )
         return None

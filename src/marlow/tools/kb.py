@@ -21,5 +21,5 @@ def search_kb(*, query: str, persist_directory: str | Path | None = None) -> Obs
     else:
         hits = fixture_search(query)
     if not hits:
-        return Observation(ok=False, code=KB_MISS, retryable=False, untrusted=True, data={"hits": []})
-    return Observation(ok=True, code="ok", retryable=False, untrusted=True, data={"hits": hits})
+        return Observation(ok=False, code=KB_MISS, retryable=False, data={"hits": []})
+    return Observation(ok=True, code="ok", retryable=False, data={"hits": hits})

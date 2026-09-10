@@ -7,6 +7,8 @@ from marlow.codes import (
     QUEUE_CHANGE,
     QUEUE_L1,
     RETRYABLE_TIMEOUT,
+    SOURCE_TRUST_INTERNAL_GATEWAY,
+    SOURCE_TRUST_UNTRUSTED_WEB_CONTENT,
     SYSTEM_GRAFANA,
     TICKET_NOT_FOUND,
     UNAUTHORIZED,
@@ -25,9 +27,21 @@ from marlow.tools import (
 )
 
 
-def test_observation_cannot_be_trusted() -> None:
-    obs = Observation(ok=True, code="ok", retryable=False, untrusted=False)
-    assert obs.untrusted is True
+def test_observation_non_gateway_is_untrusted_web_content() -> None:
+    obs = Observation(ok=True, code="ok", retryable=False, source_trust="trusted")
+    assert obs.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
+    assert "untrusted" not in obs.as_dict()
+    assert obs.as_dict()["source_trust"] == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
+
+
+def test_observation_internal_gateway_is_kept() -> None:
+    obs = Observation(
+        ok=True,
+        code="ok",
+        retryable=False,
+        source_trust=SOURCE_TRUST_INTERNAL_GATEWAY,
+    )
+    assert obs.source_trust == SOURCE_TRUST_INTERNAL_GATEWAY
 
 
 def test_get_ticket_missing_is_not_retryable(session) -> None:
@@ -35,13 +49,13 @@ def test_get_ticket_missing_is_not_retryable(session) -> None:
     assert obs.ok is False
     assert obs.code == TICKET_NOT_FOUND
     assert obs.retryable is False
-    assert obs.untrusted is True
+    assert obs.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
 
 
 def test_search_tickets_filters_by_role_and_queue(session) -> None:
     l1 = search_tickets(session, actor_id=L1_ID, query="")
     assert l1.ok is True
-    assert l1.untrusted is True
+    assert l1.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
     l1_ids = {row["id"] for row in l1.data["tickets"]}
     l1_queues = {row["queue"] for row in l1.data["tickets"]}
     assert QUEUE_CHANGE not in l1_queues
@@ -66,7 +80,7 @@ def test_l1_cannot_get_change_ticket(session) -> None:
 def test_get_ticket_comments_are_untrusted(session) -> None:
     obs = get_ticket(session, actor_id=L1_ID, ticket_id="INC-1010")
     assert obs.ok is True
-    assert obs.untrusted is True
+    assert obs.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
     bodies = [c["body"] for c in obs.data["comments"]]
     assert INJECTION_COMMENT in bodies
 
@@ -74,7 +88,7 @@ def test_get_ticket_comments_are_untrusted(session) -> None:
 def test_get_asset_returns_config_and_owner(session) -> None:
     obs = get_asset(session, actor_id=L1_ID, asset_id="ast-grafana-prod")
     assert obs.ok is True
-    assert obs.untrusted is True
+    assert obs.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
     asset = obs.data["asset"]
     assert asset["owner_employee_id"] == ADMIN_ID
     assert "grafana.example.com" in asset["config"]
@@ -84,12 +98,12 @@ def test_search_kb_empty_and_fixture_carries_doc_id_version(session) -> None:
     miss = search_kb(query="coffee machine E7")
     assert miss.ok is False
     assert miss.code == KB_MISS
-    assert miss.untrusted is True
+    assert miss.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
     assert miss.data["hits"] == []
 
     hit = search_kb(query="grafana login")
     assert hit.ok is True
-    assert hit.untrusted is True
+    assert hit.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
     assert hit.data["hits"]
     for row in hit.data["hits"]:
         assert row["doc_id"]
@@ -105,7 +119,7 @@ def test_add_comment_via_tool_is_untrusted(session) -> None:
         body="Checking login path.",
     )
     assert obs.ok is True
-    assert obs.untrusted is True
+    assert obs.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
     assert obs.data["body"] == "Checking login path."
 
 
@@ -126,7 +140,7 @@ def test_entitlement_change_tool_still_uses_gateway(session) -> None:
     session.flush()
     assert obs.ok is False
     assert obs.code == UNAUTHORIZED
-    assert obs.untrusted is True
+    assert obs.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
     assert entitlement_permission(session, "emp-007", SYSTEM_GRAFANA) == PERM_VIEWER
 
 
@@ -143,7 +157,7 @@ def test_fault_timeout_is_retryable(session) -> None:
     assert obs.ok is False
     assert obs.code == RETRYABLE_TIMEOUT
     assert obs.retryable is True
-    assert obs.untrusted is True
+    assert obs.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
 
 
 def test_fault_http_200_is_not_success(session) -> None:

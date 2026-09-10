@@ -3,7 +3,12 @@ import pytest
 import sys
 import types
 
-from marlow.codes import KB_MISS, KB_VERSION_MISMATCH, STATUS_INVESTIGATING
+from marlow.codes import (
+    KB_MISS,
+    KB_VERSION_MISMATCH,
+    SOURCE_TRUST_UNTRUSTED_WEB_CONTENT,
+    STATUS_INVESTIGATING,
+)
 from marlow.credentials import resolve_embedding_api_key
 from marlow.engine import comment_count, start_run, ticket_status
 from marlow.fake import provider_for_case
@@ -38,7 +43,7 @@ def test_split_chunks_keep_doc_id_and_version() -> None:
 def test_search_kb_hit_from_slices_is_untrusted() -> None:
     hit = search_kb(query="grafana login localhost")
     assert hit.ok is True
-    assert hit.untrusted is True
+    assert hit.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
     assert hit.data["hits"]
     for row in hit.data["hits"]:
         assert row["doc_id"]
@@ -50,7 +55,7 @@ def test_search_kb_miss_empty_hits() -> None:
     miss = search_kb(query="coffee machine E7")
     assert miss.ok is False
     assert miss.code == KB_MISS
-    assert miss.untrusted is True
+    assert miss.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
     assert miss.data["hits"] == []
 
 
@@ -78,7 +83,7 @@ def test_chroma_persist_has_version_metadata_not_tickets(tmp_path) -> None:
         assert not str(meta.get("doc_id", "")).startswith("INC-")
     obs = search_kb(query="prometheus datasource connection failed", persist_directory=persist)
     assert obs.ok is True
-    assert obs.untrusted is True
+    assert obs.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
     assert any(row["doc_id"] == "grafana-datasource" and row["version"] == "10.4" for row in obs.data["hits"])
 
 
@@ -175,7 +180,7 @@ def test_search_kb_uses_compat_embeddings_when_env_set(tmp_path, monkeypatch) ->
     build_chroma(persist, embeddings=stub)
     obs = search_kb(query="grafana login localhost", persist_directory=persist)
     assert obs.ok is True
-    assert obs.untrusted is True
+    assert obs.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
     assert queries
     assert not isinstance(stub, HashTokenEmbeddings)
 
@@ -243,7 +248,7 @@ def test_search_kb_real_backend_sends_retrieval_task(tmp_path, monkeypatch) -> N
     build_chroma(persist, embeddings=resolve_kb_embeddings())
     obs = search_kb(query="grafana login localhost", persist_directory=persist)
     assert obs.ok is True
-    assert obs.untrusted is True
+    assert obs.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
     assert queries
     assert "grafana login localhost" in queries[0]
     assert not queries[0].startswith("query: ")
