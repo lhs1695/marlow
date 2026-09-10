@@ -1,4 +1,4 @@
-"""Close ticket: require ticket_id + citation + reason. Reflect blocks incomplete evidence."""
+"""Close ticket: rules first, then model veto on evidence. Model cannot authorize a close."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from marlow.actions import Action
 from marlow.codes import (
     KB_MISS,
     KB_VERSION_MISMATCH,
+    MAX_REFLECT_REJECTIONS,
     NOT_ENOUGH_INFO,
     QUEUE_L1,
     SKILL_CLOSE,
@@ -20,6 +21,11 @@ from marlow.codes import (
     UNAUTHORIZED,
 )
 from marlow.comments import add_ticket_comment
+from marlow.evidence import (
+    EvidenceAssessment,
+    allow_close_after_reflect,
+    evidence_payload,
+)
 from marlow.models import Ticket
 from marlow.observation import Observation
 from marlow.skills.types import SkillResult, SkillSpec
@@ -29,7 +35,7 @@ SPEC = SkillSpec(
     name=SKILL_CLOSE,
     version=SKILL_VERSION,
     title="关单结案",
-    skeleton="必须有 ticket_id、引用、结案原因；缺证据或版本对不上则不关单",
+    skeleton="必须有 ticket_id、引用、结案原因；规则过后再问模型充分性，模型只有否决权",
     draft_schema={
         "type": "object",
         "properties": {
@@ -43,6 +49,10 @@ SPEC = SkillSpec(
 )
 
 RunTool = Callable[[Action], Observation]
+AssessEvidence = Callable[[dict[str, Any]], EvidenceAssessment | None]
+
+REFLECT_VETO_ANSWER = "证据不充分，不关单，继续调查。"
+REFLECT_CAP_ANSWER = "证据复核已达上限，仍不充分，不关单。"
 
 
 def apply_close(
@@ -52,6 +62,8 @@ def apply_close(
     run_tool: RunTool,
     arguments: dict[str, Any],
     ticket_id: str | None,
+    assess_evidence: AssessEvidence | None = None,
+    reflect_rejections: int = 0,
 ) -> SkillResult:
     chosen = str(arguments.get("ticket_id") or ticket_id or "")
     kb_doc_id = str(arguments.get("kb_doc_id") or "").strip() or None
@@ -121,6 +133,36 @@ def apply_close(
             draft=draft,
         )
 
+    # Rules passed. Ask the model only now — a rule miss must not spend a call.
+    # Skip further asks after max_reflect_rejections so a looping veto cannot reach MaxSteps.
+    assessment: EvidenceAssessment | None = None
+    asked = False
+    if assess_evidence is not None and reflect_rejections < MAX_REFLECT_REJECTIONS:
+        asked = True
+        assessment = assess_evidence(
+            evidence_payload(
+                ticket=ticket_data,
+                kb_doc_id=kb_doc_id,
+                kb_version=kb_version,
+                reason=reason,
+                hits=matched,
+            )
+        )
+    reflect = _reflect_payload(assessment, asked=asked, rejections=reflect_rejections)
+    if not allow_close_after_reflect(assessment):
+        new_rejections = reflect_rejections + 1
+        hit_cap = new_rejections >= MAX_REFLECT_REJECTIONS
+        reflect["rejections"] = new_rejections
+        reflect["capped"] = hit_cap
+        return SkillResult(
+            finish=hit_cap,
+            code=NOT_ENOUGH_INFO,
+            answer=REFLECT_CAP_ANSWER if hit_cap else REFLECT_VETO_ANSWER,
+            draft=draft,
+            verified_updates={"reflect_rejections": new_rejections},
+            reflect=reflect,
+        )
+
     body = f"{reason} ticket_id={chosen} kb={kb_doc_id}@{kb_version}"
     comment = add_ticket_comment(session, actor_id=actor_id, ticket_id=chosen, body=body)
     if not comment.ok:
@@ -143,4 +185,25 @@ def apply_close(
             "kb_doc_id": kb_doc_id,
             "kb_version": kb_version,
         },
+        reflect=reflect,
     )
+
+
+def _reflect_payload(
+    assessment: EvidenceAssessment | None, *, asked: bool, rejections: int
+) -> dict[str, Any]:
+    if assessment is None:
+        return {
+            "available": False,
+            "fail_open": asked,
+            "sufficient": None,
+            "rejections": rejections,
+        }
+    return {
+        "available": True,
+        "fail_open": False,
+        "sufficient": assessment.sufficient,
+        "missing": list(assessment.missing),
+        "reason": assessment.reason,
+        "rejections": rejections,
+    }

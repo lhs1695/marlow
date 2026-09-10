@@ -24,3 +24,4 @@ class SkillResult:
     draft: dict[str, Any] = field(default_factory=dict)
     verified_updates: dict[str, Any] = field(default_factory=dict)
     notes_untrusted: list[str] = field(default_factory=list)
+    reflect: dict[str, Any] | None = None

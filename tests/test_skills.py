@@ -1,11 +1,15 @@
 import json
+from dataclasses import dataclass, field
 
 from sqlalchemy import select
 
+from marlow.actions import skill
 from marlow.codes import (
     APPROVAL_REQUIRED,
     KB_MISS,
     KB_VERSION_MISMATCH,
+    MAX_REFLECT_REJECTIONS,
+    MAX_STEPS,
     NOT_ENOUGH_INFO,
     PERM_VIEWER,
     SKILL_CLOSE,
@@ -18,6 +22,7 @@ from marlow.codes import (
     SYSTEM_GRAFANA,
 )
 from marlow.engine import comment_count, start_run, ticket_status
+from marlow.evidence import EvidenceAssessment
 from marlow.fake import provider_for_case
 from marlow.gateway import entitlement_permission
 from marlow.models import MemoryNote, RunEvent, TicketComment
@@ -145,3 +150,149 @@ def test_investigate_injects_memory_notes_untrusted(session) -> None:
     assert payloads[0]["untrusted"] is True
     assert payloads[0]["notes"]
     assert "untrusted" in (second.final_answer or "")
+
+
+@dataclass
+class SpyAssessProvider:
+    inner: object
+    assessment: EvidenceAssessment | None = None
+    raise_on_assess: bool = False
+    assess_calls: list = field(default_factory=list)
+
+    def next_action(self, ticket_id: str | None, feedback: object = None):
+        return self.inner.next_action(ticket_id, feedback)
+
+    def dump_state(self) -> dict:
+        return self.inner.dump_state()
+
+    def load_state(self, state: dict) -> None:
+        self.inner.load_state(state)
+
+    def assess_evidence(self, payload: dict) -> EvidenceAssessment | None:
+        self.assess_calls.append(payload)
+        if self.raise_on_assess:
+            raise RuntimeError("model unavailable")
+        return self.assessment
+
+
+@dataclass
+class AlwaysVetoClose:
+    assess_calls: int = 0
+
+    def next_action(self, ticket_id: str | None, feedback: object = None):
+        return skill(
+            SKILL_CLOSE,
+            ticket_id="INC-1001",
+            kb_doc_id="grafana-login",
+            kb_version="10.4",
+            reason="关单",
+        )
+
+    def assess_evidence(self, payload: dict) -> EvidenceAssessment:
+        self.assess_calls += 1
+        return EvidenceAssessment(False, ["not_enough"], "veto")
+
+    def dump_state(self) -> dict:
+        return {"kind": "always_veto"}
+
+    def load_state(self, state: dict) -> None:
+        return
+
+
+def test_close_content_mismatch_vetoes_and_does_not_resolve(session) -> None:
+    comments_before = comment_count(session)
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="请关 INC-1005",
+        case_id="close_content_mismatch",
+        provider=provider_for_case("close_content_mismatch"),
+    )
+    session.flush()
+    assert ticket_status(session, "INC-1005") == STATUS_INVESTIGATING
+    assert comment_count(session) == comments_before
+    assert "不关单" in (run.final_answer or "")
+    reflects = [
+        json.loads(row.payload)
+        for row in session.scalars(select(RunEvent).where(RunEvent.run_id == run.id, RunEvent.kind == "reflect"))
+    ]
+    assert reflects
+    assert reflects[0]["sufficient"] is False
+    assert reflects[0]["available"] is True
+    assert entitlement_permission(session, "emp-003", SYSTEM_GRAFANA) == PERM_VIEWER
+
+
+def test_model_sufficient_cannot_override_close_rules(session) -> None:
+    spy = SpyAssessProvider(
+        provider_for_case("close_version_mismatch"),
+        assessment=EvidenceAssessment(True, [], "rubber stamp"),
+    )
+    comments_before = comment_count(session)
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="按旧手册关 INC-1004",
+        case_id="close_version_mismatch",
+        provider=spy,
+    )
+    session.flush()
+    assert run.outcome_code == KB_VERSION_MISMATCH
+    assert ticket_status(session, "INC-1004") == STATUS_INVESTIGATING
+    assert comment_count(session) == comments_before
+    assert spy.assess_calls == []
+
+
+def test_missing_cite_does_not_call_assess(session) -> None:
+    spy = SpyAssessProvider(
+        provider_for_case("close_missing_cite"),
+        assessment=EvidenceAssessment(True, [], "rubber stamp"),
+    )
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="请关 INC-1001",
+        case_id="close_missing_cite",
+        provider=spy,
+    )
+    session.flush()
+    assert run.outcome_code == NOT_ENOUGH_INFO
+    assert ticket_status(session, "INC-1001") == STATUS_INVESTIGATING
+    assert spy.assess_calls == []
+
+
+def test_assess_fail_open_closes_when_model_raises(session) -> None:
+    spy = SpyAssessProvider(provider_for_case("close_success"), raise_on_assess=True)
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="请调查 INC-1001 并关单",
+        case_id="close_success",
+        provider=spy,
+    )
+    session.flush()
+    assert run.outcome_code == "ok"
+    assert ticket_status(session, "INC-1001") == STATUS_RESOLVED
+    assert spy.assess_calls
+    reflects = [
+        json.loads(row.payload)
+        for row in session.scalars(select(RunEvent).where(RunEvent.run_id == run.id, RunEvent.kind == "reflect"))
+    ]
+    assert reflects[0]["fail_open"] is True
+
+
+def test_max_reflect_rejections_stops_before_max_steps(session) -> None:
+    provider = AlwaysVetoClose()
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="请关 INC-1001",
+        case_id="close_success",
+        provider=provider,
+    )
+    session.flush()
+    assert provider.assess_calls == MAX_REFLECT_REJECTIONS
+    assert run.outcome_code == NOT_ENOUGH_INFO
+    assert run.outcome_code != MAX_STEPS
+    assert ticket_status(session, "INC-1001") == STATUS_INVESTIGATING
+    assert run.step_count == MAX_REFLECT_REJECTIONS
+    assert "上限" in (run.final_answer or "")

@@ -42,6 +42,7 @@ from marlow.codes import (
     SOURCE_TRUST_INTERNAL_GATEWAY,
     STATUS_RESOLVED,
 )
+from marlow.evidence import assess_close_evidence
 from marlow.fake import ActionProvider, StepFeedback
 from marlow.faults import FAULT_TIMEOUT, FaultHooks
 from marlow.llm import bind_provider, redact_secrets
@@ -609,10 +610,14 @@ def _agent_loop(
                 arguments=action.arguments,
                 ticket_id=ticket_id,
                 run_tool=run_tool,
+                assess_evidence=lambda payload: assess_close_evidence(provider, payload),
+                reflect_rejections=int(verified.get("reflect_rejections") or 0),
             )
             verified.update(skill_result.verified_updates)
             if skill_result.answer:
                 verified["skill_answer"] = skill_result.answer
+            if skill_result.reflect:
+                _emit(session, run, "reflect", **skill_result.reflect)
             if skill_result.notes_untrusted:
                 _emit(
                     session,

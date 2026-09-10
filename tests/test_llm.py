@@ -7,9 +7,16 @@ import pytest
 from marlow.actions import skill
 from marlow.codes import SOURCE_TRUST_INTERNAL_GATEWAY, STATUS_RESOLVED
 from marlow.engine import start_run, ticket_status
+from marlow.evidence import (
+    ASSESS_EVIDENCE_TOOL,
+    EvidenceAssessment,
+    allow_close_after_reflect,
+    assessment_from_payload,
+)
 from marlow.fake import StepFeedback
 from marlow.llm import (
     CHECKPOINT_MESSAGE_CHARS,
+    EMIT_ACTION_TOOL,
     SYSTEM_PROMPT,
     OpenAIActionProvider,
     action_from_payload,
@@ -17,6 +24,7 @@ from marlow.llm import (
     checkpoint_messages,
     format_feedback,
     has_api_key,
+    parse_assessment,
     redact_secrets,
     resolve_chat_model,
     want_real_llm,
@@ -26,14 +34,23 @@ from marlow.observation import Observation
 from marlow.seed import L1_ID
 
 
-def _stub_client(payloads: list[dict]) -> SimpleNamespace:
+def _stub_client(payloads: list[dict], *, assess: dict | Exception | None = None) -> SimpleNamespace:
     remaining = list(payloads)
     calls: list[dict] = []
 
     def create(**kwargs):
         calls.append(kwargs)
-        payload = remaining.pop(0)
-        function = SimpleNamespace(name="emit_action", arguments=json.dumps(payload))
+        choice = kwargs.get("tool_choice") or {}
+        fn = choice.get("function") or {}
+        name = fn.get("name") or "emit_action"
+        if name == "assess_evidence":
+            if isinstance(assess, Exception):
+                raise assess
+            payload = assess or {"sufficient": True, "missing": [], "reason": "stub sufficient"}
+            function = SimpleNamespace(name="assess_evidence", arguments=json.dumps(payload))
+        else:
+            payload = remaining.pop(0)
+            function = SimpleNamespace(name="emit_action", arguments=json.dumps(payload))
         tool_call = SimpleNamespace(function=function)
         message = SimpleNamespace(content=None, tool_calls=[tool_call])
         usage = SimpleNamespace(prompt_tokens=9, completion_tokens=4)
@@ -126,6 +143,7 @@ def test_observation_feedback_is_user_data_not_system() -> None:
     assert "sk-leakedkey99" not in dumped
     create_kwargs = client.chat.completions.calls[0]
     assert create_kwargs["tools"][0]["function"]["name"] == "emit_action"
+    assert create_kwargs["tools"][0]["function"]["name"] != "assess_evidence"
 
 
 def test_format_feedback_marks_gateway_observation() -> None:
@@ -268,3 +286,74 @@ def test_action_from_payload_and_report_redact(tmp_path: Path, monkeypatch) -> N
     assert "sk-report-secret-aaa" not in text
     assert "gpt-4o-mini" in text
     assert "2026-09-08" in text
+
+
+def test_assess_evidence_schema_is_not_emit_action() -> None:
+    assess = ASSESS_EVIDENCE_TOOL["function"]
+    emit = EMIT_ACTION_TOOL["function"]
+    assert assess["name"] == "assess_evidence"
+    assert emit["name"] == "emit_action"
+    assert set(assess["parameters"]["properties"]) == {"sufficient", "missing", "reason"}
+    assert assess["parameters"]["required"] == ["sufficient", "missing", "reason"]
+    assert "sufficient" not in emit["parameters"]["properties"]
+    assert allow_close_after_reflect(None) is True
+    assert allow_close_after_reflect(EvidenceAssessment(True, [], "ok")) is True
+    assert allow_close_after_reflect(EvidenceAssessment(False, ["gap"], "no")) is False
+    assert assessment_from_payload({"missing": [], "reason": "x"}) is None
+    assert assessment_from_payload({"sufficient": "yes", "missing": [], "reason": "x"}) is None
+
+
+def test_parse_assessment_from_tool_call() -> None:
+    function = SimpleNamespace(
+        name="assess_evidence",
+        arguments=json.dumps({"sufficient": False, "missing": ["mismatch"], "reason": "wrong handbook"}),
+    )
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=None, tool_calls=[SimpleNamespace(function=function)]))]
+    )
+    out = parse_assessment(response)
+    assert out is not None
+    assert out.sufficient is False
+    assert out.missing == ["mismatch"]
+    assert parse_assessment(SimpleNamespace(choices=[])) is None
+
+
+def test_assess_unavailable_fail_open_still_closes(session, monkeypatch) -> None:
+    monkeypatch.delenv("MARLOW_CHAT_MODEL", raising=False)
+    client = _stub_client(
+        [
+            {"kind": "skill", "name": "investigate", "arguments": {"ticket_id": "INC-1001"}},
+            {
+                "kind": "skill",
+                "name": "close_ticket",
+                "arguments": {
+                    "ticket_id": "INC-1001",
+                    "kb_doc_id": "grafana-login",
+                    "kb_version": "10.4",
+                    "reason": "登录问题已按手册处理。",
+                },
+            },
+        ],
+        assess=RuntimeError("model down"),
+    )
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="请调查 INC-1001 并关单",
+        case_id="close_success",
+        real=True,
+        llm_client=client,
+    )
+    session.flush()
+    assert ticket_status(session, "INC-1001") == STATUS_RESOLVED
+    assert run.outcome_code == "ok"
+    reflects = [json.loads(row.payload) for row in run.events if row.kind == "reflect"]
+    assert reflects
+    assert reflects[0]["fail_open"] is True
+    assert reflects[0]["available"] is False
+    names = [
+        (call.get("tool_choice") or {}).get("function", {}).get("name")
+        for call in client.chat.completions.calls
+    ]
+    assert "emit_action" in names
+    assert "assess_evidence" in names

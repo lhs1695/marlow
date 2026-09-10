@@ -21,8 +21,15 @@ def _stub_client(payloads: list[dict]) -> SimpleNamespace:
     remaining = list(payloads)
 
     def create(**kwargs):
-        payload = remaining.pop(0)
-        function = SimpleNamespace(name="emit_action", arguments=json.dumps(payload))
+        choice = kwargs.get("tool_choice") or {}
+        fn = choice.get("function") or {}
+        name = fn.get("name") or "emit_action"
+        if name == "assess_evidence":
+            payload = {"sufficient": True, "missing": [], "reason": "stub sufficient"}
+            function = SimpleNamespace(name="assess_evidence", arguments=json.dumps(payload))
+        else:
+            payload = remaining.pop(0)
+            function = SimpleNamespace(name="emit_action", arguments=json.dumps(payload))
         tool_call = SimpleNamespace(function=function)
         message = SimpleNamespace(content=None, tool_calls=[tool_call])
         usage = SimpleNamespace(prompt_tokens=9, completion_tokens=4)
@@ -83,8 +90,8 @@ def test_tokens_come_from_caller_held_provider_not_engine(session) -> None:
     session.flush()
     assert run.outcome_code == "ok"
     assert ticket_status(session, "INC-1001") == STATUS_RESOLVED
-    assert provider.prompt_tokens == 18
-    assert provider.completion_tokens == 8
+    assert provider.prompt_tokens == 27
+    assert provider.completion_tokens == 12
     assert not hasattr(run, "prompt_tokens")
     assert not hasattr(run, "completion_tokens")
     kinds = [row.kind for row in run.events]
@@ -105,8 +112,8 @@ def test_demo_report_includes_usage_latency_and_ticket(session) -> None:
     report = run_demo_case(session, 2, real=True, llm_client=client, verbose=False)
     session.flush()
     assert report is not None
-    assert report["prompt_tokens"] == 18
-    assert report["completion_tokens"] == 8
+    assert report["prompt_tokens"] == 27
+    assert report["completion_tokens"] == 12
     assert report["ticket_status"] == STATUS_RESOLVED
     assert report["citation"] == "grafana-login@10.4"
     assert report["latency_ms"] >= 0

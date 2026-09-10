@@ -15,6 +15,7 @@ from marlow.codes import (
     SKILL_KB_QA,
     SKILL_VERSION,
 )
+from marlow.evidence import EvidenceAssessment
 from marlow.observation import Observation
 from marlow.skills.change import SPEC as CHANGE_SPEC
 from marlow.skills.change import apply_change
@@ -34,6 +35,7 @@ SKILLS: dict[str, SkillSpec] = {
 }
 
 RunTool = Callable[[Action], Observation]
+AssessEvidence = Callable[[dict[str, Any]], EvidenceAssessment | None]
 
 
 def match_skill(name: str | None, version: str | None = None) -> SkillSpec | None:
@@ -55,6 +57,8 @@ def apply_skill(
     arguments: dict[str, Any],
     ticket_id: str | None,
     run_tool: RunTool,
+    assess_evidence: AssessEvidence | None = None,
+    reflect_rejections: int = 0,
 ) -> SkillResult:
     version = arguments.get("skill_version") or arguments.get("version") or SKILL_VERSION
     spec = match_skill(name, str(version) if version else None)
@@ -73,6 +77,8 @@ def apply_skill(
             run_tool=run_tool,
             arguments=arguments,
             ticket_id=ticket_id,
+            assess_evidence=assess_evidence,
+            reflect_rejections=reflect_rejections,
         )
     if spec.name == SKILL_ENTITLEMENT_CHANGE:
         return apply_change(arguments=arguments, ticket_id=ticket_id)

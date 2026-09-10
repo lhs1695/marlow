@@ -16,6 +16,7 @@ from marlow.codes import (
     SKILL_KB_QA,
     SYSTEM_GRAFANA,
 )
+from marlow.evidence import EvidenceAssessment
 from marlow.observation import Observation
 
 
@@ -59,6 +60,15 @@ class ScriptProvider:
 
     def load_state(self, state: dict[str, Any]) -> None:
         self._index = int(state.get("index") or 0)
+
+    def assess_evidence(self, payload: dict[str, Any]) -> EvidenceAssessment | None:
+        if self.case_id == "close_content_mismatch":
+            return EvidenceAssessment(
+                sufficient=False,
+                missing=["handbook_does_not_address_ticket"],
+                reason="KB hit grafana-login does not address laptop inventory hang",
+            )
+        return EvidenceAssessment(sufficient=True, missing=[], reason="fake default after rules passed")
 
 
 @dataclass
@@ -109,6 +119,17 @@ def provider_for_case(case_id: str) -> ActionProvider:
                 kb_version="8.0",
                 reason="按旧版手册关单。",
             ),
+        ],
+        "close_content_mismatch": [
+            skill(SKILL_INVESTIGATE, ticket_id="INC-1005"),
+            skill(
+                SKILL_CLOSE,
+                ticket_id="INC-1005",
+                kb_doc_id="grafana-login",
+                kb_version="10.4",
+                reason="按命中手册关单。",
+            ),
+            answer(),
         ],
         "kb_qa_miss": [
             skill(SKILL_KB_QA, query="coffee machine error E7"),

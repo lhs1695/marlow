@@ -96,6 +96,22 @@ def test_eval_close_success_resolves_with_citation(session) -> None:
     assert closing
 
 
+def test_eval_close_content_mismatch_does_not_close(session) -> None:
+    comments = comment_count(session)
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="请关 INC-1005",
+        case_id="close_content_mismatch",
+        provider=provider_for_case("close_content_mismatch"),
+    )
+    session.flush()
+    assert ticket_status(session, "INC-1005") == STATUS_INVESTIGATING
+    assert comment_count(session) == comments
+    assert "不关单" in (run.final_answer or "")
+    assert entitlement_permission(session, "emp-003", SYSTEM_GRAFANA) == PERM_VIEWER
+
+
 def test_eval_kb_miss_does_not_invent_procedure(session) -> None:
     run = start_run(
         session,
