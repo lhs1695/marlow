@@ -9,6 +9,8 @@ steps:
   - action: click
     testid: chat-submit
   - action: expect_testid
+    testid: run-done
+  - action: expect_testid
     testid: ticket-id
     text: INC-1001
   - action: expect_testid

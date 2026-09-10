@@ -9,6 +9,8 @@ steps:
   - action: click
     testid: chat-submit
   - action: expect_testid
+    testid: run-done
+  - action: expect_testid
     testid: chat-deny
   - action: post_json
     path: /api/entitlements

@@ -9,11 +9,16 @@ steps:
   - action: click
     testid: chat-submit
   - action: expect_testid
+    testid: run-done
+  - action: expect_testid
     testid: ticket-id
     text: INC-1005
   - action: expect_testid
     testid: ticket-status
     text: Investigating
+  - action: expect_testid
+    testid: chat-stream
+    contains: 降级
   - action: expect_absent_text
     texts:
       - 已授权成功

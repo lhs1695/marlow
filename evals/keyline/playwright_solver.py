@@ -59,13 +59,14 @@ def _assert_dom_item(page: Page, item: dict[str, Any]) -> None:
     if item.get("visible") is False:
         expect(loc).to_have_count(0)
         return
+    kwargs = {"timeout": 15_000} if item["testid"] == "run-done" else {}
     if "text" in item:
-        expect(loc).to_have_text(item["text"])
+        expect(loc).to_have_text(item["text"], **kwargs)
         return
     if "contains" in item:
-        expect(loc).to_contain_text(item["contains"])
+        expect(loc).to_contain_text(item["contains"], **kwargs)
         return
-    expect(loc).to_be_visible()
+    expect(loc).to_be_visible(**kwargs)
 
 
 def _corrupt_session_cookie(page: Page) -> None:
