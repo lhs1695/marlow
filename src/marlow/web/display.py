@@ -15,7 +15,7 @@ from marlow.codes import (
 )
 
 ROLE_ZH = {ROLE_L1: "一线", ROLE_ADMIN: "管理员"}
-QUEUE_ZH = {QUEUE_L1: "一线队列", QUEUE_CHANGE: "变更队列"}
+QUEUE_ZH = {QUEUE_L1: "一线", QUEUE_CHANGE: "变更"}
 STATUS_ZH = {
     STATUS_NEW: "新建",
     STATUS_INVESTIGATING: "调查中",
@@ -23,7 +23,6 @@ STATUS_ZH = {
     STATUS_RESOLVED: "已解决",
     STATUS_REJECTED: "已拒绝",
 }
-DEMO_FOCUS_IDS = frozenset({"INC-1001", "INC-1005", "CHG-2003", "CHG-2004"})
 
 
 def role_zh(role: str) -> str:

@@ -4,37 +4,49 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>登录 — Marlow</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
 </head>
-<body>
-  <div class="shell">
-    <section class="card login-hero">
-      <h1>Marlow</h1>
-      <p class="lede">一线用自然语言调查 / 关单；改 Grafana 权限必须人批。模型说成功不算数，通过条件是工单库终态和审计。</p>
-      <p class="lede">角色只来自服务端 Session，不能用查询参数覆盖。</p>
-      <div class="login-actions">
-        <form method="post" action="/login">
-          <input type="hidden" name="account" value="l1">
-          <input type="hidden" name="password" value="l1-demo">
-          <button type="submit" data-testid="login-l1">以一线登录</button>
-        </form>
-        <form method="post" action="/login">
-          <input type="hidden" name="account" value="admin">
-          <input type="hidden" name="password" value="admin-demo">
-          <button type="submit" class="ghost" data-testid="login-admin">以管理员登录</button>
-        </form>
-      </div>
-    </section>
-    <section class="card">
-      <h2>演示五段（Fake，无 Key）</h2>
+<body class="login-body">
+  <section class="login-panel">
+    <div class="wrap-mark" aria-hidden="true">M</div>
+    <p class="eyebrow">IT 工单台</p>
+    <h1>Marlow</h1>
+    <p class="thesis">关单以工单库与审计终态为准，不以模型自称成功为准。</p>
+    <div class="login-actions">
+      <form method="post" action="/login">
+        <input type="hidden" name="account" value="l1">
+        <input type="hidden" name="password" value="l1-demo">
+        <button type="submit" class="role-card" data-testid="login-l1">
+          <span>
+            <strong>一线</strong>
+            <span class="role-hint">调查、关单；改权限须提交审批</span>
+          </span>
+          <span class="role-code">L1</span>
+        </button>
+      </form>
+      <form method="post" action="/login">
+        <input type="hidden" name="account" value="admin">
+        <input type="hidden" name="password" value="admin-demo">
+        <button type="submit" class="role-card" data-testid="login-admin">
+          <span>
+            <strong>管理员</strong>
+            <span class="role-hint">审批队列 · 写 entitlements</span>
+          </span>
+          <span class="role-code">Admin</span>
+        </button>
+      </form>
+    </div>
+    <details class="examples-fold">
+      <summary>示例</summary>
       <ol class="examples">
-        <li>澄清：<code>Grafana 登录有问题，帮我看看</code></li>
-        <li>调查并关单：<code>请调查 INC-1001 并关单</code></li>
-        <li>超时降级：<code>读取 INC-1005 的资产配置</code></li>
-        <li>变更待批：<code>工单 CHG-2004 申请给 emp-007 加 Grafana Editor</code>（拒绝对照 CHG-2003；同意在本页批 CHG-2004）</li>
-        <li>一线越权：<code>在 CHG-2004 上直接改权限</code></li>
+        <li><code>Grafana 登录有问题，帮我看看</code></li>
+        <li><code>请调查 INC-1001 并关单</code></li>
+        <li><code>读取 INC-1005 的资产配置</code></li>
+        <li><code>工单 CHG-2004 申请给 emp-007 加 Grafana Editor</code></li>
+        <li><code>在 CHG-2004 上直接改权限</code></li>
       </ol>
-    </section>
-  </div>
+    </details>
+  </section>
 </body>
 </html>

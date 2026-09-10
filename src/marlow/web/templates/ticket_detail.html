@@ -1,20 +1,22 @@
 {% extends "base.html" %}
 {% block title %}{{ ticket.id }} — Marlow{% endblock %}
 {% block body %}
-<h1 class="page-title">{{ ticket.title }}</h1>
-<p class="lede">单号 <span class="mono" data-testid="ticket-id">{{ ticket.id }}</span> · 终态以状态和审计为准</p>
+<nav class="crumb"><a href="/tickets">工单</a><span class="crumb-sep">/</span><span class="mono">{{ ticket.id }}</span></nav>
+<h1 class="page-title">
+  <span class="mono" data-testid="ticket-id">{{ ticket.id }}</span>
+  <span class="title-sep" aria-hidden="true">·</span>
+  <span>{{ ticket.title }}</span>
+</h1>
 
 <section class="card">
   <dl class="meta-grid">
     <dt>状态</dt>
     <dd>
-      <span class="badge tone-{{ status_tone(ticket.status) }}">
-        <span data-testid="ticket-status">{{ ticket.status }}</span>
-        {{ status_zh(ticket.status) }}
-      </span>
+      <span class="badge tone-{{ status_tone(ticket.status) }}">{{ status_zh(ticket.status) }}</span>
+      <span class="sr-only" data-testid="ticket-status">{{ ticket.status }}</span>
     </dd>
     <dt>队列</dt>
-    <dd>{{ queue_zh(ticket.queue) }} <span class="claim-zh mono">{{ ticket.queue }}</span></dd>
+    <dd>{{ queue_zh(ticket.queue) }}</dd>
     <dt>优先级</dt>
     <dd>{{ ticket.priority or "—" }}</dd>
     <dt>请求人</dt>
@@ -22,14 +24,14 @@
     <dt>资产</dt>
     <dd class="mono">{{ ticket.asset_id or "—" }}</dd>
     <dt>手册引用</dt>
-    <dd data-testid="ticket-citation">{% if ticket.kb_doc_id %}{{ ticket.kb_doc_id }}@{{ ticket.kb_version }}{% else %}无{% endif %}</dd>
+    <dd data-testid="ticket-citation">{% if ticket.kb_doc_id %}{{ ticket.kb_doc_id }}@{{ ticket.kb_version }}{% else %}—{% endif %}</dd>
     {% if permission %}
-    <dt>Grafana 权限</dt>
+    <dt>Grafana</dt>
     <dd><span data-testid="entitlement-permission">{{ permission }}</span></dd>
     {% endif %}
   </dl>
   {% if ticket.description %}
-  <p class="lede" style="margin-top:0.85rem">{{ ticket.description }}</p>
+  <p class="desc">{{ ticket.description }}</p>
   {% endif %}
   {% if ticket.status == 'Rejected' %}
   <p class="flash-bad" data-testid="reject-notice">审批已拒绝，权限未变更。</p>
@@ -38,45 +40,56 @@
 
 <section class="card">
   <h2>评论</h2>
-  <ul data-testid="ticket-comments" class="list-plain">
+  <ul data-testid="ticket-comments" class="timeline">
     {% for c in comments %}
-    <li class="comment-line"><span class="mono">{{ c.author_id }}</span>：{{ c.body }}</li>
+    <li class="timeline-item"><span class="mono">{{ c.author_id }}</span> {{ c.body }}</li>
     {% else %}
     <li class="empty">暂无评论</li>
     {% endfor %}
   </ul>
-  <form method="post" action="/tickets/{{ ticket.id }}/comments" class="stack" style="margin-top:0.75rem">
-    <textarea name="body" data-testid="comment-input" placeholder="添加评论"></textarea>
-    <div class="row">
-      <button type="submit" data-testid="comment-submit">发表评论</button>
-    </div>
+  <form method="post" action="/tickets/{{ ticket.id }}/comments" class="composer-form comment-form">
+    <textarea name="body" data-testid="comment-input" rows="2" placeholder="添加评论"></textarea>
+    <button type="submit" class="ghost" data-testid="comment-submit">提交</button>
   </form>
 </section>
 
-<section class="card">
-  <h2>审计</h2>
-  <ul data-testid="audit-block" class="list-plain">
-    {% for ev in audits %}
-    <li class="audit-line">
-      <span class="mono">{{ ev.actor_role }}</span>
-      {{ ev.action }}
-      <span class="badge tone-{% if ev.outcome in ['ok', 'approve'] %}ok{% elif ev.outcome in ['deny', 'reject', 'unauthorized'] %}bad{% else %}new{% endif %}">{{ ev.outcome }}</span>
-      <span class="claim-zh">{{ ev.detail }}</span>
-    </li>
-    {% else %}
-    <li class="muted empty">暂无审计事件</li>
-    {% endfor %}
-  </ul>
+<section class="card card-flush">
+  <h2 class="card-head">审计</h2>
+  <table class="ticket-table audit-table" data-testid="audit-block">
+    <thead>
+      <tr>
+        <th>角色</th>
+        <th>动作</th>
+        <th>结果</th>
+        <th>详情</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ev in audits %}
+      <tr>
+        <td class="mono">{{ ev.actor_role }}</td>
+        <td>{{ ev.action }}</td>
+        <td>
+          <span class="badge tone-{% if ev.outcome in ['ok', 'approve'] %}ok{% elif ev.outcome in ['deny', 'reject', 'unauthorized'] %}bad{% else %}new{% endif %}">{{ ev.outcome }}</span>
+        </td>
+        <td class="muted">{{ ev.detail }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="4" class="empty">暂无审计</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </section>
 
 {% if can_decide %}
 <section class="card">
   <h2>审批</h2>
-  <p class="lede">写 Grafana 权限只走网关。重复批准是同一幂等键语义，不会双写。</p>
   <form method="post" action="/approvals" class="row">
     <input type="hidden" name="ticket_id" value="{{ ticket.id }}">
     <input type="hidden" name="target_employee_id" value="{{ ticket.requester_id }}">
-    <button type="submit" name="decision" value="approve" data-testid="approval-approve">批准</button>
+    <button type="submit" class="ghost" name="decision" value="approve" data-testid="approval-approve">批准</button>
     <button type="submit" name="decision" value="reject" class="danger" data-testid="approval-reject">拒绝</button>
   </form>
 </section>

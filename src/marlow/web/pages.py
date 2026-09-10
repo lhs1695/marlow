@@ -30,7 +30,6 @@ from marlow.tools.tickets import get_ticket, search_tickets
 from marlow.web.auth import SESSION_ACTOR_KEY, actor_from_session
 from marlow.web.deps import Db, enforce_limit
 from marlow.web.display import (
-    DEMO_FOCUS_IDS,
     queue_zh,
     role_zh,
     show_change_decisions,
@@ -65,7 +64,6 @@ def _page_ctx(request: Request, actor, **extra):
         "actor": actor,
         "query_role": query_role,
         "claim_mismatch": bool(query_role) and query_role != actor.role,
-        "demo_focus_ids": DEMO_FOCUS_IDS,
         "chat_clarify": request.session.get("chat_clarify"),
         "chat_deny": request.session.get("chat_deny"),
         "chat_answer": request.session.get("chat_answer"),

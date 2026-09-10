@@ -4,79 +4,75 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Marlow{% endblock %}</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <div class="shell">
+  <div class="app">
     <header class="topbar">
-      <div class="brand">
-        <strong>Marlow</strong>
-        <span>工单助手 · 过 = 库终态 + 审计</span>
+      <div class="topbar-inner">
+        <div class="topbar-left">
+          <a class="brand" href="/tickets">Marlow</a>
+          <nav class="nav-links">
+            <a href="/tickets" {% if request.url.path.startswith("/tickets") %}aria-current="page"{% endif %}>工单</a>
+            {% if actor and actor.role == 'admin' %}
+            <a href="/approvals" {% if request.url.path == "/approvals" %}aria-current="page"{% endif %}>审批</a>
+            {% endif %}
+          </nav>
+        </div>
+        <div class="topbar-right">
+          <span class="who">{{ actor.name }} · {{ role_zh(actor.role) }}</span>
+          <span class="sr-only" data-testid="role">{{ actor.role }}</span>
+          <span
+            data-testid="page-claim"
+            class="{% if claim_mismatch %}claim-warn{% else %}sr-only{% endif %}"
+          >{% if query_role %}?role={{ query_role }}{% endif %}{% if claim_mismatch %} 未生效{% endif %}</span>
+          <form method="post" action="/logout">
+            <button type="submit" class="ghost">退出</button>
+          </form>
+        </div>
       </div>
-      <nav class="nav-links">
-        <a href="/tickets" {% if request.url.path.startswith("/tickets") %}aria-current="page"{% endif %}>工单</a>
-        {% if actor and actor.role == 'admin' %}
-        <a href="/approvals" {% if request.url.path == "/approvals" %}aria-current="page"{% endif %}>审批队列</a>
-        {% endif %}
-        <span class="claim-zh">{{ actor.name }}</span>
-        <form method="post" action="/logout" style="display:inline">
-          <button type="submit" class="ghost">退出</button>
-        </form>
-      </nav>
     </header>
 
-    <aside class="claim-bar{% if claim_mismatch %} claim-bar--mismatch{% endif %}">
-      <div class="claim-cell">
-        <span class="claim-k">会话角色（Cookie）</span>
-        <span class="claim-v">
-          <span data-testid="role">{{ actor.role }}</span>
-          <span class="claim-zh">{{ role_zh(actor.role) }}</span>
-        </span>
-      </div>
-      <div class="claim-cell" data-testid="page-claim">
-        <span class="claim-k">页面声称</span>
-        <span class="claim-v">{% if query_role %}?role={{ query_role }}{% else %}无 ?role=，与会话相同{% endif %}</span>
-        {% if claim_mismatch %}
-        <span class="claim-warn">URL 不能覆盖 Session，写权限仍走网关</span>
+    <main class="main">
+      <div class="main-inner">
+        {% if chat_run_id or chat_clarify or chat_deny or chat_answer %}
+        <section class="chat-result">
+          {% if chat_run_id %}
+          <p class="chat-meta">
+            <span>run_id=<span class="mono">{{ chat_run_id }}</span></span>
+            <span>{{ chat_run_status }}</span>
+            {% if chat_outcome %}<span>{{ chat_outcome }}</span>{% endif %}
+            <a href="/api/runs/{{ chat_run_id }}/events">SSE</a>
+          </p>
+          {% endif %}
+          {% if chat_clarify %}
+          <div class="flash-warn">
+            <p data-testid="chat-clarify">{{ chat_clarify }}</p>
+          </div>
+          {% endif %}
+          {% if chat_deny %}
+          <div class="flash-bad">
+            <p data-testid="chat-deny">{{ chat_deny }}</p>
+          </div>
+          {% endif %}
+          {% if chat_answer %}
+          <pre class="chat-answer" data-testid="chat-stream">{{ chat_answer }}</pre>
+          {% endif %}
+        </section>
         {% endif %}
+        {% block body %}{% endblock %}
       </div>
-    </aside>
+    </main>
 
-    {% block body %}{% endblock %}
-
-    <section class="card" id="chat">
-      <h2>对话</h2>
-      <p class="lede">自然语言下达调查 / 关单。HTTP 200 不算成功；终态看工单状态和审计。</p>
-      <form method="post" action="/chat" class="stack">
-        <input type="hidden" name="next" value="{{ request.url.path }}">
-        <textarea name="text" data-testid="chat-input" placeholder="用自然语言调查或关单，请带工单号">{% if chat_text %}{{ chat_text }}{% endif %}</textarea>
-        <div class="row">
+    <section class="composer" id="chat">
+      <div class="composer-inner">
+        <form method="post" action="/chat" class="composer-form">
+          <input type="hidden" name="next" value="{{ request.url.path }}">
+          <textarea name="text" data-testid="chat-input" rows="2" placeholder="带工单号发送">{% if chat_text %}{{ chat_text }}{% endif %}</textarea>
           <button type="submit" data-testid="chat-submit">发送</button>
-        </div>
-      </form>
-      {% if chat_run_id %}
-      <p class="chat-meta">
-        <span>run_id=<span class="mono">{{ chat_run_id }}</span></span>
-        <span>status={{ chat_run_status }}</span>
-        <span>code={{ chat_outcome }}</span>
-        <a href="/api/runs/{{ chat_run_id }}/events">步骤流 SSE</a>
-      </p>
-      {% endif %}
-      {% if chat_clarify %}
-      <div class="flash-warn">
-        <p data-testid="chat-clarify">{{ chat_clarify }}</p>
+        </form>
       </div>
-      {% endif %}
-      {% if chat_deny %}
-      <div class="flash-bad">
-        <p data-testid="chat-deny">{{ chat_deny }}</p>
-      </div>
-      {% endif %}
-      {% if chat_answer %}
-      <div class="flash-ok">
-        <pre class="chat-answer" data-testid="chat-stream">{{ chat_answer }}</pre>
-      </div>
-      {% endif %}
     </section>
   </div>
 </body>

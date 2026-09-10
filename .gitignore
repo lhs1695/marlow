@@ -27,3 +27,6 @@ chroma*/
 
 # Live-model reports (not CI)
 evals/live/reports/
+
+# Visual explorations (not the running app)
+designs/

@@ -111,6 +111,7 @@ def search_tickets(
                     "title": t.title,
                     "status": t.status,
                     "queue": t.queue,
+                    "priority": t.priority,
                     "requester_id": t.requester_id,
                     "asset_id": t.asset_id,
                 }

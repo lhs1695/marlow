@@ -47,6 +47,10 @@ def test_login_page_has_account_testids() -> None:
     assert page.status_code == 200
     assert f'data-testid="{LOGIN_L1}"' in page.text
     assert f'data-testid="{LOGIN_ADMIN}"' in page.text
+    assert "<summary>示例</summary>" in page.text
+    assert "关单以工单库与审计终态为准" in page.text
+    assert "HTTP 200" not in page.text
+    assert "模型说成功" not in page.text
 
 
 def test_l1_list_has_no_unapproved_grant_success() -> None:
@@ -61,6 +65,9 @@ def test_l1_list_has_no_unapproved_grant_success() -> None:
     assert "权限已变更" not in page.text
     assert "已授权成功" not in page.text
     assert f'data-testid="{APPROVAL_APPROVE}"' not in page.text
+    assert "pill-demo" not in page.text
+    assert "HTTP 200" not in page.text
+    assert "优先级" in page.text
 
 
 def test_l1_detail_testids_and_query_role_still_l1() -> None:
@@ -227,6 +234,10 @@ def test_static_css_is_served() -> None:
     css = client.get("/static/app.css")
     assert css.status_code == 200
     assert "--accent" in css.text
+    assert ":focus-visible" in css.text
+    icon = client.get("/static/favicon.svg")
+    assert icon.status_code == 200
+    assert "<svg" in icon.text
 
 
 def test_l1_can_add_comment_on_incident() -> None:

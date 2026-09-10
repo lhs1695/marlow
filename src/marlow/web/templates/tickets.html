@@ -1,34 +1,32 @@
 {% extends "base.html" %}
-{% block title %}工单列表 — Marlow{% endblock %}
+{% block title %}工单 — Marlow{% endblock %}
 {% block body %}
-<h1 class="page-title">工单列表</h1>
-<p class="lede">按会话角色过滤队列。一线只见一线队列；高亮行是现场五段会指到的单。</p>
-<div class="card" style="padding:0">
+<h1 class="page-title">工单</h1>
+<div class="card card-flush">
   <table class="ticket-table" data-testid="ticket-list">
     <thead>
       <tr>
         <th>单号</th>
         <th>标题</th>
         <th>状态</th>
+        <th>优先级</th>
         <th>队列</th>
       </tr>
     </thead>
     <tbody>
       {% for t in tickets %}
-      <tr data-testid="ticket-row-{{ t.id }}" class="{% if t.id in demo_focus_ids %}row-focus{% endif %}">
-        <td class="mono"><a href="/tickets/{{ t.id }}">{{ t.id }}</a>{% if t.id in demo_focus_ids %}<span class="pill-demo">演示</span>{% endif %}</td>
+      <tr data-testid="ticket-row-{{ t.id }}" class="click-row">
+        <td class="mono id-cell"><a class="stretch-link" href="/tickets/{{ t.id }}">{{ t.id }}</a></td>
         <td>{{ t.title }}</td>
         <td>
-          <span class="badge tone-{{ status_tone(t.status) }}">
-            <span class="mono">{{ t.status }}</span>
-            {{ status_zh(t.status) }}
-          </span>
+          <span class="badge tone-{{ status_tone(t.status) }}">{{ status_zh(t.status) }}</span>
         </td>
-        <td>{{ queue_zh(t.queue) }} <span class="claim-zh mono">{{ t.queue }}</span></td>
+        <td class="muted">{{ t.priority or "—" }}</td>
+        <td class="muted">{{ queue_zh(t.queue) }}</td>
       </tr>
       {% else %}
       <tr>
-        <td colspan="4" class="empty">当前角色队列为空</td>
+        <td colspan="5" class="empty">队列为空</td>
       </tr>
       {% endfor %}
     </tbody>
