@@ -41,7 +41,8 @@ from marlow.llm import bind_provider, redact_secrets
 from marlow.models import AgentSession, MemoryNote, Run, RunEvent, Ticket, TicketComment
 from marlow.observation import Observation
 from marlow.skills import apply_skill, match_skill
-from marlow.tools import TOOL_APPLY_ENTITLEMENT_CHANGE, TOOL_GET_ASSET, execute_tool
+from marlow.tool_client import ToolClient, resolve_tool_client
+from marlow.tools import TOOL_APPLY_ENTITLEMENT_CHANGE, TOOL_GET_ASSET
 
 TICKET_ID_RE = re.compile(r"\b(INC-\d+|CHG-\d+)\b", re.IGNORECASE)
 
@@ -138,9 +139,11 @@ def start_run(
     limits: RunLimits | None = None,
     real: bool = False,
     llm_client: Any | None = None,
+    tool_client: ToolClient | None = None,
 ) -> Run:
     limits = limits or RunLimits()
     hooks = faults or FaultHooks()
+    client = resolve_tool_client(session, hooks, tool_client)
     ticket_id = extract_ticket_id(user_text)
     agent_session = _session(session, session_id=session_id, actor_id=actor_id)
     run_id = _new_id()
@@ -214,7 +217,7 @@ def start_run(
             )
 
             def run_tool(tool_action: Action) -> Observation:
-                obs = _call_tool(session, run, actor_id, tool_action, hooks)
+                obs = _call_tool(session, run, actor_id, tool_action, client)
                 if obs.ok:
                     _merge_verified(verified, tool_action.name or "", obs)
                 return obs
@@ -276,10 +279,10 @@ def start_run(
             _finish(session, run, agent_session, RUN_FAILED, "non_retryable", "未知 Action。", verified)
             return run
 
-        obs = _call_tool(session, run, actor_id, action, hooks)
+        obs = _call_tool(session, run, actor_id, action, client)
         if obs.retryable and obs.code == RETRYABLE_TIMEOUT:
             _emit(session, run, "retry", code=obs.code, tool=action.name)
-            obs = _call_tool(session, run, actor_id, action, hooks)
+            obs = _call_tool(session, run, actor_id, action, client)
 
         if action.name == TOOL_GET_ASSET and not obs.ok:
             _finish(session, run, agent_session, RUN_COMPLETED, obs.code, DEGRADE_ANSWER, verified)
@@ -307,10 +310,10 @@ def _call_tool(
     run: Run,
     actor_id: str,
     action: Action,
-    hooks: FaultHooks,
+    tool_client: ToolClient,
 ) -> Observation:
     _set_status(session, run, RUN_WAITING_TOOL)
-    obs = execute_tool(session, action.name or "", actor_id=actor_id, faults=hooks, **action.arguments)
+    obs = tool_client.call(action.name or "", actor_id=actor_id, **action.arguments)
     _emit(
         session,
         run,

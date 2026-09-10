@@ -52,7 +52,7 @@ uv run python -m marlow.web
 | 登录与四页 | `src/marlow/web/`（`data-testid`：`testids.py`） |
 | 冻结 Fake 评测 | `tests/test_eval_frozen.py` |
 
-MCP Inspector / stdio：`uv run python -m marlow.ticket_mcp`。
+MCP Inspector / stdio：`uv run python -m marlow.ticket_mcp`。Run 默认进程内调同一套工具；设 `MARLOW_TOOL_CLIENT=stdio`（并给 `MARLOW_DATABASE_URL` 一个文件库）时走 MCP 子进程。对照评测里工单终态和 `audit_events` 一致。已知差异：`FaultHooks` 是进程内对象，过不去 stdio，故障注入仍走进程内；`search_kb` 在子进程里自建检索，两侧都要用固定夹具，不要一边哈希一边真向量。内存 SQLite 子进程看不见。
 
 ## 真模型（可选）
 
