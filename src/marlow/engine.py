@@ -97,6 +97,11 @@ def _new_id() -> str:
     return uuid.uuid4().hex
 
 
+def _persist(session: Session) -> None:
+    """Commit Run writes now. A crash can leave committed steps; terminal status + audit_events are the record."""
+    session.commit()
+
+
 def _set_status(session: Session, run: Run, status: str) -> None:
     run.status = status
     _emit(session, run, "state", status=status)
@@ -105,6 +110,7 @@ def _set_status(session: Session, run: Run, status: str) -> None:
 def _emit(session: Session, run: Run, event_kind: str, **payload: Any) -> None:
     blob = redact_secrets(json.dumps(payload, ensure_ascii=False))
     session.add(RunEvent(run_id=run.id, kind=event_kind, payload=blob))
+    _persist(session)
 
 
 def _charge(run: Run, limits: RunLimits) -> str | None:
@@ -179,6 +185,7 @@ def start_run(
             _emit(session, run, "brake", code=brake, steps=run.step_count)
             _finish(session, run, agent_session, RUN_FAILED, brake, MAX_STEPS_ANSWER, verified)
             return run
+        _persist(session)
 
         action = provider.next_action(ticket_id, feedback)
         _emit(
@@ -391,6 +398,7 @@ def _finish(
                 body=f"untrusted note from run {run.id}: {code}",
             )
         )
+    _persist(session)
 
 
 def comment_count(session: Session) -> int:

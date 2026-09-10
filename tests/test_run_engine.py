@@ -1,7 +1,10 @@
 import json
+from pathlib import Path
 
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
+from marlow.actions import Action, answer, tool
 from marlow.codes import (
     APPROVAL_REQUIRED,
     MAX_STEPS,
@@ -10,16 +13,18 @@ from marlow.codes import (
     RETRYABLE_TIMEOUT,
     RUN_COMPLETED,
     RUN_FAILED,
+    RUN_RUNNING,
     RUN_WAITING_APPROVAL,
     STATUS_INVESTIGATING,
     SYSTEM_GRAFANA,
     UNAUTHORIZED,
 )
+from marlow.db import make_engine, prepare_database
 from marlow.engine import comment_count, start_run, ticket_status
-from marlow.fake import provider_for_case
+from marlow.fake import ScriptProvider, provider_for_case
 from marlow.faults import FAULT_TIMEOUT, FaultHooks
 from marlow.gateway import entitlement_permission
-from marlow.models import AuditEvent, MemoryNote, RunEvent, Ticket
+from marlow.models import AuditEvent, MemoryNote, Run, RunEvent, Ticket
 from marlow.seed import L1_ID
 
 
@@ -137,6 +142,57 @@ def test_investigate_uses_extracted_ticket_id_and_l1_cannot_read_change(session)
     session.flush()
     assert run.outcome_code == UNAUTHORIZED
     assert entitlement_permission(session, "emp-007", SYSTEM_GRAFANA) == PERM_VIEWER
+
+
+def test_failed_run_keeps_committed_steps_after_rollback(session) -> None:
+    comments_before = comment_count(session)
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="请调查 INC-1001",
+        provider=ScriptProvider(
+            [
+                tool("add_ticket_comment", ticket_id="INC-1001", body="step leftover"),
+                Action(kind="tool"),
+            ]
+        ),
+    )
+    run_id = run.id
+    assert run.status == RUN_FAILED
+    session.rollback()
+    assert session.get(Run, run_id) is not None
+    assert comment_count(session) == comments_before + 1
+
+
+def test_mid_run_events_are_visible_to_another_session(tmp_path: Path) -> None:
+    engine = make_engine("sqlite:///" + (tmp_path / "run.db").resolve().as_posix())
+    prepare_database(engine)
+    seen: dict[str, object] = {}
+
+    class Probe:
+        def next_action(self, ticket_id: str | None, feedback: object = None) -> Action:
+            with Session(engine) as other:
+                row = other.scalar(select(Run).where(Run.ticket_id == "INC-1001"))
+                seen["found"] = row is not None
+                if row is not None:
+                    seen["status"] = row.status
+                    seen["kinds"] = [
+                        event.kind
+                        for event in other.scalars(select(RunEvent).where(RunEvent.run_id == row.id))
+                    ]
+            return answer()
+
+    with Session(engine) as session:
+        start_run(
+            session,
+            actor_id=L1_ID,
+            user_text="请调查 INC-1001",
+            provider=Probe(),
+        )
+
+    assert seen.get("found") is True
+    assert seen.get("status") == RUN_RUNNING
+    assert "state" in (seen.get("kinds") or [])
 
 
 def test_demo_five_segments_fake(capsys, monkeypatch) -> None:

@@ -11,12 +11,19 @@ from sqlalchemy.pool import StaticPool
 from marlow.models import Base, Employee
 from marlow.seed import seed_if_empty
 
+SQLITE_BUSY_TIMEOUT_MS = 5000
+
+
+def _is_sqlite_memory(url: str) -> bool:
+    return ":memory:" in url or url.endswith("sqlite://")
+
 
 def make_engine(url: str = "sqlite:///:memory:") -> Engine:
     kwargs: dict = {}
+    sqlite_memory = url.startswith("sqlite") and _is_sqlite_memory(url)
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
-        if ":memory:" in url or url.endswith("sqlite://"):
+        if sqlite_memory:
             kwargs["poolclass"] = StaticPool
     engine = create_engine(url, **kwargs)
     if url.startswith("sqlite"):
@@ -25,6 +32,9 @@ def make_engine(url: str = "sqlite:///:memory:") -> Engine:
         def _enable_fk(dbapi_connection, _connection_record) -> None:  # type: ignore[no-untyped-def]
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
+            if not sqlite_memory:
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
             cursor.close()
 
     Base.metadata.create_all(engine)
