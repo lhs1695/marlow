@@ -97,6 +97,7 @@ def test_change_skill_does_not_write_entitlements(session) -> None:
     assert run.outcome_code == APPROVAL_REQUIRED
     assert entitlement_permission(session, "emp-007", SYSTEM_GRAFANA) == before == PERM_VIEWER
     assert ticket_status(session, "CHG-2004") != STATUS_RESOLVED
+    assert run.status == "waiting_approval"
 
 
 def test_kb_qa_miss_refuses_without_inventing(session) -> None:

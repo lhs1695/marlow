@@ -1,0 +1,57 @@
+id: kl-16-hitl-resume
+login_role: l1
+start_path: /tickets/INC-1001
+expect_privilege_fail: false
+steps:
+  - action: fill
+    testid: chat-input
+    text: 工单 CHG-2004 申请给 emp-007 加 Grafana Editor
+  - action: click
+    testid: chat-submit
+  - action: expect_testid
+    testid: run-waiting-approval
+  - action: click
+    testid: logout
+  - action: click
+    testid: login-admin
+  - action: open
+    path: /approvals
+  - action: click
+    testid: approval-approve
+    ticket_id: CHG-2004
+  - action: expect_testid
+    testid: run-done
+  - action: expect_testid
+    testid: ticket-status
+    text: Resolved
+  - action: expect_testid
+    testid: entitlement-permission
+    text: Editor
+  - action: expect_testid
+    testid: role
+    text: admin
+expect:
+  url_contains: /tickets/CHG-2004
+  dom:
+    - testid: ticket-status
+      text: Resolved
+    - testid: entitlement-permission
+      text: Editor
+  db:
+    session_role: l1
+    ticket:
+      id: CHG-2004
+      status: Resolved
+    entitlement:
+      employee_id: emp-007
+      system: grafana
+      permission: Editor
+    run:
+      ticket_id: CHG-2004
+      actor_id: emp-l1
+      status: completed
+    entitlement_audit:
+      ticket_id: CHG-2004
+      actor_role: admin
+      outcome: approved
+      equals: 1

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from marlow.models import Approval, Employee, Entitlement, Ticket, TicketComment
+from marlow.models import Approval, AuditEvent, Employee, Entitlement, Run, Ticket, TicketComment
 
 EntitlementSnap = frozenset[tuple[str, str, str]]
 ApprovalSnap = frozenset[tuple[str, str, str, str, str, str]]
@@ -91,6 +91,34 @@ def extra_db_reasons(
         actual = snapshot_approval_count(session, count_spec["ticket_id"])
         if actual != int(count_spec["equals"]):
             reasons.append(f"approval_count={actual} expected={count_spec['equals']}")
+    run_spec = db_expect.get("run") or {}
+    if run_spec:
+        row = session.scalar(
+            select(Run).where(Run.ticket_id == run_spec["ticket_id"]).order_by(Run.id.desc())
+        )
+        if row is None:
+            reasons.append(f"run missing ticket={run_spec['ticket_id']}")
+        else:
+            if "actor_id" in run_spec and row.actor_id != run_spec["actor_id"]:
+                reasons.append(f"run_actor_id={row.actor_id!r} expected={run_spec['actor_id']!r}")
+            if "status" in run_spec and row.status != run_spec["status"]:
+                reasons.append(f"run_status={row.status!r} expected={run_spec['status']!r}")
+    audit_spec = db_expect.get("entitlement_audit") or {}
+    if audit_spec:
+        rows = list(
+            session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.action == "apply_entitlement_change",
+                    AuditEvent.ticket_id == audit_spec["ticket_id"],
+                    AuditEvent.outcome == audit_spec.get("outcome", "approved"),
+                )
+            )
+        )
+        if "equals" in audit_spec and len(rows) != int(audit_spec["equals"]):
+            reasons.append(f"entitlement_audit={len(rows)} expected={audit_spec['equals']}")
+        expected_role = audit_spec.get("actor_role")
+        if expected_role and any(row.actor_role != expected_role for row in rows):
+            reasons.append("entitlement_audit actor_role mismatch")
     return reasons
 
 

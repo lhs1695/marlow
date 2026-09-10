@@ -18,7 +18,7 @@ CI 与日常开发默认 **Fake**（无 API Key）；有 Key 也不得让 `pytes
 
 ## 纪律
 
-- 工具 Observation 一律 untrusted（含 KB 切片、工单评论）。
+- 外部数据 `untrusted_web_content`，内部网关结果 `internal_gateway`，除网关外一律 untrusted（含 KB 切片、工单评论）。
 - 写 entitlements 只走审批网关；权检不进 prompt。
 - Run 的动作 / 观察 / 状态**落库即提交**（`engine._persist`，「事件即提交边界」）。**不要退回请求级长事务**——MCP 跨进程写与 SSE 实时读都依赖它。失败靠 Run 终态码 + `audit_events` 收口，不靠回滚。
 - 禁止改评测断言换绿，也禁止用 `sleep`、`skip`、`xfail`、`continue-on-error` 制造绿。测试确需改动时**单独 commit 并写清为什么必须改**。

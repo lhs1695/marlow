@@ -24,7 +24,7 @@ from marlow.codes import (
     UNAUTHORIZED,
 )
 from marlow.comments import add_ticket_comment
-from marlow.engine import create_run, http_fake_case_id
+from marlow.engine import claim_run_resume, create_run, http_fake_case_id, waiting_run_for_ticket
 from marlow.gateway import apply_entitlement_change, entitlement_permission
 from marlow.llm import want_real_llm
 from marlow.models import AuditEvent, Run, Ticket
@@ -221,6 +221,7 @@ def register_pages(app: FastAPI) -> None:
         if decision not in {DECISION_APPROVE, DECISION_REJECT}:
             raise HTTPException(status_code=400, detail="unauthorized")
         key = str(form.get("idempotency_key") or f"html-{ticket_id}-{decision}")
+        waiting = waiting_run_for_ticket(db, ticket_id)
         result = apply_entitlement_change(
             db,
             actor_id=actor.id,
@@ -230,11 +231,21 @@ def register_pages(app: FastAPI) -> None:
             new_permission=PERM_EDITOR,
             decision=decision,
             idempotency_key=key,
+            run_id=None if waiting is None else waiting.id,
         )
         if not result.ok:
             status = 403 if result.code == UNAUTHORIZED else 400
             raise HTTPException(status_code=status, detail=result.code)
+        claimed = False
+        resume_id = None if waiting is None else waiting.id
+        if resume_id is not None:
+            claimed = claim_run_resume(db, resume_id)
         db.commit()
+        if claimed and resume_id is not None:
+            worker: RunWorker = request.app.state.runner
+            await worker.submit(resume_id, real=want_real_llm())
+            request.session["chat_run_id"] = resume_id
+            return RedirectResponse(_with_run_id(f"/tickets/{ticket_id}", resume_id), status_code=303)
         return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
 
     @app.post("/chat")

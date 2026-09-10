@@ -5,14 +5,16 @@ from types import SimpleNamespace
 import pytest
 
 from marlow.actions import skill
-from marlow.codes import STATUS_RESOLVED
+from marlow.codes import SOURCE_TRUST_INTERNAL_GATEWAY, STATUS_RESOLVED
 from marlow.engine import start_run, ticket_status
 from marlow.fake import StepFeedback
 from marlow.llm import (
+    CHECKPOINT_MESSAGE_CHARS,
     SYSTEM_PROMPT,
     OpenAIActionProvider,
     action_from_payload,
     bind_provider,
+    checkpoint_messages,
     format_feedback,
     has_api_key,
     redact_secrets,
@@ -124,6 +126,47 @@ def test_observation_feedback_is_user_data_not_system() -> None:
     assert "sk-leakedkey99" not in dumped
     create_kwargs = client.chat.completions.calls[0]
     assert create_kwargs["tools"][0]["function"]["name"] == "emit_action"
+
+
+def test_format_feedback_marks_gateway_observation() -> None:
+    feedback = StepFeedback(
+        action=skill("entitlement_change", ticket_id="CHG-2004"),
+        observation=Observation(
+            ok=True,
+            code="ok",
+            retryable=False,
+            source_trust=SOURCE_TRUST_INTERNAL_GATEWAY,
+            data={"decision": "approve"},
+        ),
+    )
+    blob = format_feedback(feedback)
+    assert blob.startswith("INTERNAL_GATEWAY_OBSERVATION")
+    assert "UNTRUSTED_OBSERVATION" not in blob
+    assert SOURCE_TRUST_INTERNAL_GATEWAY in blob
+
+
+def test_openai_dump_state_redacts_and_caps_messages(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-dump-secret-xyz")
+    provider = OpenAIActionProvider("请调查 INC-1001", client=object(), model="gpt-4o-mini-test")
+    provider.messages.append(
+        {"role": "user", "content": "note sk-dump-secret-xyz " + ("x" * (CHECKPOINT_MESSAGE_CHARS + 50))}
+    )
+    for index in range(20):
+        provider.messages.append({"role": "user", "content": f"turn-{index}"})
+    state = provider.dump_state()
+    dumped = json.dumps(state)
+    assert "sk-dump-secret-xyz" not in dumped
+    assert state["kind"] == "openai"
+    assert len(state["messages"]) <= 16
+    assert state["messages"][0]["role"] == "system"
+    long_ones = [msg for msg in state["messages"] if isinstance(msg.get("content"), str) and "xxx" in msg["content"]]
+    assert all(len(msg["content"]) <= CHECKPOINT_MESSAGE_CHARS + 1 for msg in long_ones)
+    trimmed = checkpoint_messages(provider.messages)
+    assert trimmed[0]["role"] == "system"
+    restored = OpenAIActionProvider("other", client=object(), model="other-model")
+    restored.load_state(state)
+    assert restored.messages == state["messages"]
+    assert restored.model == "gpt-4o-mini-test"
 
 
 def test_bind_defaults_to_fake_even_with_key(monkeypatch) -> None:

@@ -10,7 +10,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from marlow.actions import Action
@@ -18,7 +18,9 @@ from marlow.codes import (
     ACTION_ANSWER,
     ACTION_SKILL,
     ACTION_TOOL,
-    APPROVAL_REQUIRED,
+    APPROVAL_REJECTED,
+    DECISION_APPROVE,
+    DECISION_REJECT,
     FAKE_COST_CENTS_PER_STEP,
     FAKE_TOKENS_PER_STEP,
     MAX_COST_CENTS_LIMIT,
@@ -26,6 +28,7 @@ from marlow.codes import (
     MAX_STEPS_LIMIT,
     MAX_TOKENS_LIMIT,
     NOT_ENOUGH_INFO,
+    OK,
     RETRYABLE_TIMEOUT,
     RUN_ADMITTED,
     RUN_CANCELLED,
@@ -36,12 +39,13 @@ from marlow.codes import (
     RUN_WAITING_APPROVAL,
     RUN_WAITING_TOOL,
     SKILL_VERSION,
+    SOURCE_TRUST_INTERNAL_GATEWAY,
     STATUS_RESOLVED,
 )
 from marlow.fake import ActionProvider, StepFeedback
 from marlow.faults import FAULT_TIMEOUT, FaultHooks
 from marlow.llm import bind_provider, redact_secrets
-from marlow.models import AgentSession, MemoryNote, Run, RunEvent, Ticket, TicketComment
+from marlow.models import AgentSession, Approval, MemoryNote, Run, RunEvent, Ticket, TicketComment
 from marlow.observation import Observation
 from marlow.skills import apply_skill, match_skill
 from marlow.tool_client import ToolClient, resolve_tool_client
@@ -51,7 +55,9 @@ TICKET_ID_RE = re.compile(r"\b(INC-\d+|CHG-\d+)\b", re.IGNORECASE)
 
 CLARIFY_ANSWER = "请提供工单号（如 INC-1001），当前信息不足，未改工单库。"
 DEGRADE_ANSWER = "资产读取超时，已降级。未编造资产配置或关单。"
-HITL_ANSWER = "权限变更草案已提交，等待管理员审批。本 Run 不续跑。"
+HITL_ANSWER = "权限变更草案已提交，等待管理员审批。"
+APPROVE_RESUME_ANSWER = "审批已通过，权限已由网关写入。"
+REJECT_RESUME_ANSWER = "变更被拒，这张工单未关单。权限未改。"
 DENY_ANSWER = "变更未生效：网关拒绝。entitlements 未改。"
 MAX_STEPS_ANSWER = "已达步数上限，安全停止，未关单。"
 CANCEL_ANSWER = "任务已取消。"
@@ -90,6 +96,8 @@ def http_fake_case_id(user_text: str) -> str | None:
     ticket_id = extract_ticket_id(user_text)
     if ticket_id is None:
         return None
+    if ticket_id == "CHG-2004" and "申请" in user_text:
+        return "change_hitl"
     return _HTTP_FAKE_BY_TICKET.get(ticket_id, "investigate")
 
 
@@ -317,8 +325,240 @@ def _start_run(
 
     verified: dict[str, Any] = {"ticket_id": ticket_id}
     _set_status(session, run, RUN_RUNNING)
-    feedback: StepFeedback | None = None
+    return _agent_loop(
+        session,
+        run,
+        agent_session,
+        actor_id=actor_id,
+        ticket_id=ticket_id,
+        provider=provider,
+        client=client,
+        limits=limits,
+        verified=verified,
+        feedback=None,
+    )
 
+
+def resume_run(
+    session: Session,
+    *,
+    run_id: str,
+    faults: FaultHooks | None = None,
+    provider: ActionProvider | None = None,
+    limits: RunLimits | None = None,
+    real: bool = False,
+    llm_client: Any | None = None,
+    tool_client: ToolClient | None = None,
+    on_event: OnEvent | None = None,
+) -> Run:
+    token = _ON_EVENT.set(on_event)
+    try:
+        return _resume_run(
+            session,
+            run_id=run_id,
+            faults=faults,
+            provider=provider,
+            limits=limits,
+            real=real,
+            llm_client=llm_client,
+            tool_client=tool_client,
+        )
+    finally:
+        _ON_EVENT.reset(token)
+
+
+def claim_run_resume(session: Session, run_id: str) -> bool:
+    """UPDATE ... WHERE status=waiting_approval. Zero rows means another claim won."""
+    result = session.execute(
+        update(Run)
+        .where(Run.id == run_id, Run.status == RUN_WAITING_APPROVAL)
+        .values(status=RUN_RUNNING)
+    )
+    _persist(session)
+    return int(result.rowcount or 0) == 1
+
+
+def waiting_run_for_ticket(session: Session, ticket_id: str) -> Run | None:
+    return session.scalar(
+        select(Run)
+        .where(Run.ticket_id == ticket_id, Run.status == RUN_WAITING_APPROVAL)
+        .order_by(Run.id.desc())
+    )
+
+
+def latest_checkpoint(session: Session, run_id: str) -> dict[str, Any] | None:
+    row = session.scalar(
+        select(RunEvent)
+        .where(RunEvent.run_id == run_id, RunEvent.kind == "checkpoint")
+        .order_by(RunEvent.id.desc())
+    )
+    if row is None:
+        return None
+    try:
+        data = json.loads(row.payload) if row.payload else {}
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _resume_run(
+    session: Session,
+    *,
+    run_id: str,
+    faults: FaultHooks | None,
+    provider: ActionProvider | None,
+    limits: RunLimits | None,
+    real: bool,
+    llm_client: Any | None,
+    tool_client: ToolClient | None,
+) -> Run:
+    limits = limits or RunLimits()
+    hooks = faults or FaultHooks()
+    client = resolve_tool_client(session, hooks, tool_client)
+    run = session.get(Run, run_id)
+    if run is None:
+        raise ValueError(f"run not found: {run_id}")
+    actor_id = run.actor_id
+    agent_session = session.get(AgentSession, run.session_id)
+    if agent_session is None:
+        raise ValueError(f"session not found: {run.session_id}")
+    checkpoint = latest_checkpoint(session, run.id)
+    if checkpoint is None:
+        raise ValueError(f"checkpoint not found: {run_id}")
+
+    run.step_count = int(checkpoint.get("step_count") or 0)
+    run.token_used = int(checkpoint.get("token_used") or 0)
+    run.cost_cents = int(checkpoint.get("cost_cents") or 0)
+    verified = dict(checkpoint.get("verified") or {})
+    ticket_id = str(checkpoint.get("ticket_id") or run.ticket_id or "")
+    if not ticket_id:
+        _finish(session, run, agent_session, RUN_FAILED, NOT_ENOUGH_INFO, CLARIFY_ANSWER, verified)
+        return run
+
+    if _cancel_requested(session, run):
+        _finish(session, run, agent_session, RUN_CANCELLED, RUN_CANCELLED, CANCEL_ANSWER, verified)
+        return run
+
+    bound, llm_meta = bind_provider(
+        user_text=run.user_text,
+        case_id=run.case_id,
+        real=real,
+        provider=provider,
+        client=llm_client,
+    )
+    bound.load_state(dict(checkpoint.get("provider") or {}))
+    if llm_meta.get("provider") == "openai":
+        _emit(session, run, "llm", provider="openai", model=llm_meta.get("model", ""), resumed=True)
+
+    obs = _gateway_observation(session, run, checkpoint)
+    last_raw = checkpoint.get("last_action") or {}
+    last_action = Action(
+        kind=str(last_raw.get("kind") or ACTION_SKILL),
+        name=last_raw.get("name"),
+        arguments=dict(last_raw.get("arguments") or {}),
+        text=str(last_raw.get("text") or ""),
+    )
+    _emit(
+        session,
+        run,
+        "observation",
+        tool="approval_gateway",
+        ok=obs.ok,
+        code=obs.code,
+        retryable=obs.retryable,
+        source_trust=obs.source_trust,
+    )
+    if obs.code == APPROVAL_REJECTED:
+        verified["skill_answer"] = REJECT_RESUME_ANSWER
+    elif obs.ok:
+        verified["skill_answer"] = APPROVE_RESUME_ANSWER
+    feedback = StepFeedback(action=last_action, observation=obs, verified=dict(verified))
+    if run.status != RUN_RUNNING:
+        _set_status(session, run, RUN_RUNNING)
+    return _agent_loop(
+        session,
+        run,
+        agent_session,
+        actor_id=actor_id,
+        ticket_id=ticket_id,
+        provider=bound,
+        client=client,
+        limits=limits,
+        verified=verified,
+        feedback=feedback,
+    )
+
+
+def _gateway_observation(session: Session, run: Run, checkpoint: dict[str, Any]) -> Observation:
+    approval = session.scalar(select(Approval).where(Approval.run_id == run.id).order_by(Approval.id.desc()))
+    if approval is None:
+        return Observation(
+            ok=False,
+            code=NOT_ENOUGH_INFO,
+            retryable=False,
+            source_trust=SOURCE_TRUST_INTERNAL_GATEWAY,
+            data={"reason": "missing_approval", "draft": checkpoint.get("draft") or {}},
+        )
+    approved = approval.status == "approved"
+    return Observation(
+        ok=approved,
+        code=OK if approved else APPROVAL_REJECTED,
+        retryable=False,
+        source_trust=SOURCE_TRUST_INTERNAL_GATEWAY,
+        data={
+            "decision": DECISION_APPROVE if approved else DECISION_REJECT,
+            "ticket_id": approval.ticket_id,
+            "approval_status": approval.status,
+            "draft": checkpoint.get("draft") or {},
+        },
+    )
+
+
+def _pause_hitl(
+    session: Session,
+    run: Run,
+    provider: ActionProvider,
+    verified: dict[str, Any],
+    action: Action,
+    skill_result: Any,
+) -> None:
+    run.outcome_code = skill_result.code
+    run.final_answer = skill_result.answer or HITL_ANSWER
+    checkpoint = {
+        "step_count": run.step_count,
+        "token_used": run.token_used,
+        "cost_cents": run.cost_cents,
+        "verified": verified,
+        "draft": skill_result.draft,
+        "ticket_id": run.ticket_id,
+        "actor_id": run.actor_id,
+        "case_id": run.case_id,
+        "provider": provider.dump_state(),
+        "last_action": {
+            "kind": action.kind,
+            "name": action.name,
+            "arguments": action.arguments,
+            "text": action.text,
+        },
+    }
+    _emit(session, run, "checkpoint", **checkpoint)
+    _set_status(session, run, RUN_WAITING_APPROVAL)
+    _emit(session, run, "hitl", code=skill_result.code, draft=skill_result.draft)
+
+
+def _agent_loop(
+    session: Session,
+    run: Run,
+    agent_session: AgentSession,
+    *,
+    actor_id: str,
+    ticket_id: str,
+    provider: ActionProvider,
+    client: ToolClient,
+    limits: RunLimits,
+    verified: dict[str, Any],
+    feedback: StepFeedback | None,
+) -> Run:
     while True:
         if _cancel_requested(session, run):
             _finish(session, run, agent_session, RUN_CANCELLED, RUN_CANCELLED, CANCEL_ANSWER, verified)
@@ -382,17 +622,7 @@ def _start_run(
                     notes=skill_result.notes_untrusted,
                 )
             if skill_result.hitl:
-                _set_status(session, run, RUN_WAITING_APPROVAL)
-                _emit(session, run, "hitl", code=APPROVAL_REQUIRED, draft=skill_result.draft)
-                _finish(
-                    session,
-                    run,
-                    agent_session,
-                    RUN_COMPLETED,
-                    skill_result.code,
-                    skill_result.answer or HITL_ANSWER,
-                    verified,
-                )
+                _pause_hitl(session, run, provider, verified, action, skill_result)
                 return run
             if skill_result.finish:
                 text = skill_result.answer or _answer_from_verified(verified)
@@ -429,7 +659,15 @@ def _start_run(
             return run
 
         if action.name == TOOL_APPLY_ENTITLEMENT_CHANGE:
-            _finish(session, run, agent_session, RUN_COMPLETED, obs.code, DENY_ANSWER if not obs.ok else "变更已由网关处理。", verified)
+            _finish(
+                session,
+                run,
+                agent_session,
+                RUN_COMPLETED,
+                obs.code,
+                DENY_ANSWER if not obs.ok else "变更已由网关处理。",
+                verified,
+            )
             return run
 
         if obs.ok:

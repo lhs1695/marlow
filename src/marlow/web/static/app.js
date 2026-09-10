@@ -40,6 +40,7 @@
     if (kind === "answer") return data.text || "已给出答复";
     if (kind === "brake") return "已达步数上限，安全停止";
     if (kind === "hitl") return "权限变更草案已提交，等待审批";
+    if (kind === "checkpoint") return "已保存断点，等待审批后继续";
     if (kind === "llm") return "已接模型 " + (data.model || "");
     if (kind === "memory") return "已记录不可信笔记";
     if (kind === "waiting_approval") return "等待管理员审批";
@@ -156,9 +157,16 @@
     const kind = data.kind || ev.type;
     appendStep(kind, data, ev.lastEventId || data.id);
     if (kind === "clarify" || kind === "answer") applyAnswer(Object.assign({ kind: kind }, data));
+    if (
+      kind === "waiting_approval" ||
+      kind === "hitl" ||
+      (kind === "state" && data.status === "waiting_approval")
+    ) {
+      ensureNode("run-waiting-approval", "p", "sr-only").textContent = "waiting_approval";
+    }
   }
 
-  ["step", "tool", "answer", "llm", "hitl", "memory", "waiting_approval"].forEach((name) => {
+  ["step", "tool", "answer", "llm", "hitl", "memory", "waiting_approval", "checkpoint"].forEach((name) => {
     source.addEventListener(name, onFrame);
   });
   source.addEventListener("done", (ev) => {

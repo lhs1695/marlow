@@ -91,6 +91,7 @@ class Approval(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     ticket_id: Mapped[str] = mapped_column(ForeignKey("tickets.id"), nullable=False)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("runs.id"), nullable=True)
     target_employee_id: Mapped[str] = mapped_column(ForeignKey("employees.id"), nullable=False)
     system: Mapped[str] = mapped_column(String(64), nullable=False)
     requested_permission: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -99,6 +100,7 @@ class Approval(Base):
     decided_by_id: Mapped[str | None] = mapped_column(ForeignKey("employees.id"), nullable=True)
 
     ticket: Mapped[Ticket] = relationship(back_populates="approvals")
+    run: Mapped[Run | None] = relationship()
 
 
 class AuditEvent(Base):

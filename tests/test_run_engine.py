@@ -111,6 +111,7 @@ def test_change_run_enters_waiting_approval(session) -> None:
         for row in session.scalars(select(RunEvent).where(RunEvent.run_id == run.id, RunEvent.kind == "state"))
     ]
     assert RUN_WAITING_APPROVAL in states
+    assert run.status == RUN_WAITING_APPROVAL
     assert run.outcome_code == APPROVAL_REQUIRED
     assert entitlement_permission(session, "emp-007", SYSTEM_GRAFANA) == PERM_VIEWER
     assert ticket_status(session, "CHG-2004") != "Resolved"

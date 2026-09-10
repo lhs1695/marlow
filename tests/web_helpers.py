@@ -51,6 +51,19 @@ def wait_for_run(client: TestClient, run_id: str) -> dict:
     return body
 
 
+def wait_for_run_status(client: TestClient, run_id: str, *statuses: str) -> dict:
+    """Poll GET. waiting_approval keeps SSE open, so do not read the event stream to completion."""
+    wanted = set(statuses)
+    last = None
+    for _ in range(200):
+        res = client.get(f"/api/runs/{run_id}")
+        assert res.status_code == 200, res.text
+        last = res.json()
+        if last.get("status") in wanted:
+            return last
+    raise AssertionError(f"run {run_id} stayed {last} wanted {wanted}")
+
+
 def run_id_from_location(location: str) -> str:
     values = parse_qs(urlparse(location).query).get("run_id") or []
     assert values, location

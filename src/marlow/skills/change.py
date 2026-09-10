@@ -54,7 +54,7 @@ def apply_change(*, arguments: dict[str, Any], ticket_id: str | None) -> SkillRe
     return SkillResult(
         finish=True,
         code=APPROVAL_REQUIRED,
-        answer="权限变更草案已提交，等待管理员审批。本 Run 不续跑。",
+        answer="权限变更草案已提交，等待管理员审批。",
         hitl=True,
         draft=draft,
     )

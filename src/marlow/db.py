@@ -39,6 +39,7 @@ def make_engine(url: str = "sqlite:///:memory:") -> Engine:
 
     Base.metadata.create_all(engine)
     _ensure_run_cancel_column(engine)
+    _ensure_approval_run_id_column(engine)
     return engine
 
 
@@ -51,6 +52,17 @@ def _ensure_run_cancel_column(engine: Engine) -> None:
         return
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE runs ADD COLUMN cancel_requested BOOLEAN NOT NULL DEFAULT 0"))
+
+
+def _ensure_approval_run_id_column(engine: Engine) -> None:
+    inspector = inspect(engine)
+    if "approvals" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("approvals")}
+    if "run_id" in columns:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE approvals ADD COLUMN run_id VARCHAR(64)"))
 
 
 def prepare_database(engine: Engine) -> None:

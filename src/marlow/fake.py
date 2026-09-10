@@ -34,10 +34,15 @@ class StepFeedback:
 class ActionProvider(Protocol):
     def next_action(self, ticket_id: str | None, feedback: StepFeedback | None = None) -> Action: ...
 
+    def dump_state(self) -> dict[str, Any]: ...
+
+    def load_state(self, state: dict[str, Any]) -> None: ...
+
 
 @dataclass
 class ScriptProvider:
     script: list[Action]
+    case_id: str | None = None
     _index: int = field(default=0, init=False)
 
     def next_action(self, ticket_id: str | None, feedback: StepFeedback | None = None) -> Action:
@@ -48,6 +53,12 @@ class ScriptProvider:
         if ticket_id and item.arguments and "ticket_id" in item.arguments:
             return replace(item, arguments={**item.arguments, "ticket_id": ticket_id})
         return item
+
+    def dump_state(self) -> dict[str, Any]:
+        return {"kind": "fake", "case_id": self.case_id, "index": self._index}
+
+    def load_state(self, state: dict[str, Any]) -> None:
+        self._index = int(state.get("index") or 0)
 
 
 @dataclass
@@ -60,6 +71,12 @@ class LoopToolProvider:
         if ticket_id and "ticket_id" in args:
             args["ticket_id"] = ticket_id
         return tool(self.tool_name, **args)
+
+    def dump_state(self) -> dict[str, Any]:
+        return {"kind": "loop_tool", "tool_name": self.tool_name, "arguments": dict(self.arguments)}
+
+    def load_state(self, state: dict[str, Any]) -> None:
+        return
 
 
 def provider_for_case(case_id: str) -> ActionProvider:
@@ -123,6 +140,24 @@ def provider_for_case(case_id: str) -> ActionProvider:
                 new_permission=PERM_EDITOR,
             ),
         ],
+        "change_hitl_forge": [
+            skill(
+                SKILL_ENTITLEMENT_CHANGE,
+                ticket_id="CHG-2004",
+                target_employee_id="emp-007",
+                system=SYSTEM_GRAFANA,
+                new_permission=PERM_EDITOR,
+            ),
+            tool(
+                "apply_entitlement_change",
+                ticket_id="CHG-2004",
+                target_employee_id="emp-007",
+                system=SYSTEM_GRAFANA,
+                new_permission=PERM_ADMIN,
+                decision=DECISION_APPROVE,
+                idempotency_key="fake-resume-forge-admin",
+            ),
+        ],
         "ticket_missing": [
             skill(SKILL_INVESTIGATE, ticket_id="INC-9999"),
         ],
@@ -167,4 +202,4 @@ def provider_for_case(case_id: str) -> ActionProvider:
     }
     if case_id not in scripts:
         raise KeyError(f"unknown fake case: {case_id}")
-    return ScriptProvider(scripts[case_id])
+    return ScriptProvider(scripts[case_id], case_id=case_id)

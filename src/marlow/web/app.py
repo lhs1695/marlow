@@ -27,7 +27,7 @@ from marlow.codes import (
     UNAUTHORIZED,
 )
 from marlow.db import make_engine, prepare_database
-from marlow.engine import create_run, http_fake_case_id
+from marlow.engine import claim_run_resume, create_run, http_fake_case_id, waiting_run_for_ticket
 from marlow.gateway import apply_entitlement_change
 from marlow.llm import want_real_llm
 from marlow.models import Employee, Run, RunEvent
@@ -231,8 +231,9 @@ def create_app(
         )
 
     @app.post("/api/entitlements")
-    def entitlement_change(body: EntitlementBody, request: Request, db: Db) -> dict[str, Any]:
+    async def entitlement_change(body: EntitlementBody, request: Request, db: Db) -> dict[str, Any]:
         actor = actor_from_session(request, db)
+        waiting = waiting_run_for_ticket(db, body.ticket_id)
         result = apply_entitlement_change(
             db,
             actor_id=actor.id,
@@ -242,11 +243,19 @@ def create_app(
             new_permission=body.new_permission,
             decision=body.decision,
             idempotency_key=body.idempotency_key,
+            run_id=None if waiting is None else waiting.id,
         )
         if not result.ok:
             status = 403 if result.code == UNAUTHORIZED else 400
             raise HTTPException(status_code=status, detail=result.code)
+        claimed = False
+        resume_id = None if waiting is None else waiting.id
+        if resume_id is not None:
+            claimed = claim_run_resume(db, resume_id)
         db.commit()
+        if claimed and resume_id is not None:
+            worker: RunWorker = request.app.state.runner
+            await worker.submit(resume_id, real=want_real_llm())
         return {"ok": result.ok, "code": result.code}
 
     static_dir = Path(__file__).resolve().parent / "static"

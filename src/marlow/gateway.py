@@ -41,6 +41,7 @@ def apply_entitlement_change(
     new_permission: str,
     decision: str,
     idempotency_key: str,
+    run_id: str | None = None,
 ) -> ApplyResult:
     actor = session.get(Employee, actor_id)
     actor_role = actor.role if actor is not None else "unknown"
@@ -84,6 +85,7 @@ def apply_entitlement_change(
         session.add(
             Approval(
                 ticket_id=ticket_id,
+                run_id=run_id,
                 target_employee_id=target_employee_id,
                 system=system,
                 requested_permission=new_permission,
@@ -123,6 +125,7 @@ def apply_entitlement_change(
     session.add(
         Approval(
             ticket_id=ticket_id,
+            run_id=run_id,
             target_employee_id=target_employee_id,
             system=system,
             requested_permission=new_permission,

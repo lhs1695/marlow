@@ -19,6 +19,7 @@ def test_http_fake_case_id_maps_seeds_only() -> None:
     assert http_fake_case_id("请调查 INC-1001 并关单") == "close_success"
     assert http_fake_case_id("读取 INC-1005 的资产配置") == "timeout"
     assert http_fake_case_id("请在 CHG-2004 上改权限") == "investigate"
+    assert http_fake_case_id("工单 CHG-2004 申请给 emp-007 加 Grafana Editor") == "change_hitl"
     assert http_fake_case_id("请关 INC-1002") == "investigate"
     assert http_fake_case_id("请关 INC-1002") != "close_success"
 

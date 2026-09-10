@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from marlow.codes import NON_RETRYABLE, RUN_FAILED, TERMINAL_RUN_STATUSES
-from marlow.engine import http_fake_faults, start_run
+from marlow.engine import http_fake_faults, latest_checkpoint, resume_run, start_run
 from marlow.llm import want_real_llm
 from marlow.models import AgentSession, Run, RunEvent
 
@@ -113,17 +113,26 @@ class RunWorker:
             if run.status in TERMINAL_RUN_STATUSES:
                 return
             try:
-                start_run(
-                    session,
-                    actor_id=run.actor_id,
-                    user_text=run.user_text,
-                    case_id=run.case_id,
-                    session_id=run.session_id,
-                    run_id=run.id,
-                    faults=http_fake_faults(run.user_text),
-                    real=job.real,
-                    on_event=self.publish,
-                )
+                if latest_checkpoint(session, run.id) is not None:
+                    resume_run(
+                        session,
+                        run_id=run.id,
+                        faults=http_fake_faults(run.user_text),
+                        real=job.real,
+                        on_event=self.publish,
+                    )
+                else:
+                    start_run(
+                        session,
+                        actor_id=run.actor_id,
+                        user_text=run.user_text,
+                        case_id=run.case_id,
+                        session_id=run.session_id,
+                        run_id=run.id,
+                        faults=http_fake_faults(run.user_text),
+                        real=job.real,
+                        on_event=self.publish,
+                    )
             except Exception:
                 session.rollback()
                 failed = session.get(Run, job.run_id)

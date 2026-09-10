@@ -20,6 +20,7 @@ EXPECTED_IDS = [
     "kl-13-l1-open-approve",
     "kl-14-idempotent-ui",
     "kl-15-low-risk-comment",
+    "kl-16-hitl-resume",
 ]
 
 

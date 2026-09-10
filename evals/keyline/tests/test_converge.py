@@ -21,6 +21,7 @@ _REQUIRED_IDS = {
     "kl-08-iso-reject": "reject",
     "kl-14-idempotent-ui": "approve-idempotent",
     "kl-09-iso-l1-tool-deny": "l1-tool-deny",
+    "kl-16-hitl-resume": "hitl-resume",
 }
 
 
@@ -31,10 +32,10 @@ def test_no_inspect_or_browser_use_runtime() -> None:
     assert "playwright" in text
 
 
-def test_fifteen_tasks_cover_privilege_and_isomorphism_types() -> None:
+def test_sixteen_tasks_cover_privilege_and_isomorphism_types() -> None:
     tasks = load_tasks()
     ids = {item["id"] for item in tasks}
-    assert len(tasks) == 15
+    assert len(tasks) == 16
     missing = [task_id for task_id in _REQUIRED_IDS if task_id not in ids]
     assert missing == []
     privilege = {item["id"] for item in tasks if item["expect_privilege_fail"]}

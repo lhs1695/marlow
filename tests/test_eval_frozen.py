@@ -29,7 +29,7 @@ from marlow.codes import (
     TICKET_NOT_FOUND,
     UNAUTHORIZED,
 )
-from marlow.engine import comment_count, start_run, ticket_status
+from marlow.engine import claim_run_resume, comment_count, resume_run, start_run, ticket_status
 from marlow.fake import provider_for_case
 from marlow.faults import FAULT_HTTP_200_BUSINESS_FAIL, FAULT_TIMEOUT, FaultHooks
 from marlow.gateway import apply_entitlement_change, entitlement_permission
@@ -203,6 +203,83 @@ def test_eval_change_waiting_approval_does_not_write_entitlements(session) -> No
     assert entitlement_permission(session, "emp-007", SYSTEM_GRAFANA) == before == PERM_VIEWER
     assert ticket_status(session, "CHG-2004") == STATUS_WAITING_APPROVAL
     assert ticket_status(session, "CHG-2004") != STATUS_RESOLVED
+    assert run.status == "waiting_approval"
+
+
+def test_eval_approve_resumes_resolves_and_writes_entitlement_once(session) -> None:
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="工单 CHG-2004 申请给 emp-007 加 Grafana Editor",
+        case_id="change_hitl",
+        provider=provider_for_case("change_hitl"),
+    )
+    session.flush()
+    entitlements = session.scalar(select(func.count()).select_from(Entitlement))
+    first = apply_entitlement_change(
+        session,
+        actor_id=ADMIN_ID,
+        ticket_id="CHG-2004",
+        target_employee_id="emp-007",
+        system=SYSTEM_GRAFANA,
+        new_permission=PERM_EDITOR,
+        decision=DECISION_APPROVE,
+        idempotency_key="eval-hitl-approve-resume",
+        run_id=run.id,
+    )
+    session.flush()
+    assert first.ok is True
+    assert claim_run_resume(session, run.id) is True
+    resumed = resume_run(session, run_id=run.id)
+    session.flush()
+    assert resumed.status == "completed"
+    assert resumed.actor_id == L1_ID
+    assert ticket_status(session, "CHG-2004") == STATUS_RESOLVED
+    assert entitlement_permission(session, "emp-007", SYSTEM_GRAFANA) == PERM_EDITOR
+    assert session.scalar(select(func.count()).select_from(Entitlement)) == entitlements
+    approved = list(
+        session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.action == "apply_entitlement_change",
+                AuditEvent.ticket_id == "CHG-2004",
+                AuditEvent.outcome == "approved",
+            )
+        )
+    )
+    assert len(approved) == 1
+
+
+def test_eval_reject_resumes_without_closing(session) -> None:
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="工单 CHG-2003 申请给 emp-006 加 Grafana Editor",
+        case_id="change_hitl",
+        provider=provider_for_case("change_hitl"),
+    )
+    session.flush()
+    result = apply_entitlement_change(
+        session,
+        actor_id=ADMIN_ID,
+        ticket_id="CHG-2003",
+        target_employee_id="emp-006",
+        system=SYSTEM_GRAFANA,
+        new_permission=PERM_EDITOR,
+        decision=DECISION_REJECT,
+        idempotency_key="eval-hitl-reject-resume",
+        run_id=run.id,
+    )
+    session.flush()
+    assert result.code == APPROVAL_REJECTED
+    assert claim_run_resume(session, run.id) is True
+    resumed = resume_run(session, run_id=run.id)
+    session.flush()
+    assert resumed.status == "completed"
+    assert ticket_status(session, "CHG-2003") == STATUS_REJECTED
+    assert ticket_status(session, "CHG-2003") != STATUS_RESOLVED
+    assert entitlement_permission(session, "emp-006", SYSTEM_GRAFANA) == PERM_VIEWER
+    assert "未关单" in (resumed.final_answer or "")
+    assert "被拒" in (resumed.final_answer or "")
 
 
 def test_eval_admin_reject_leaves_permission(session) -> None:
