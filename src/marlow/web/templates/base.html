@@ -6,6 +6,7 @@
   <title>{% block title %}Marlow{% endblock %}</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
 </head>
 <body>
   <div class="app">
@@ -37,14 +38,27 @@
     <main class="main">
       <div class="main-inner">
         {% if chat_run_id or chat_clarify or chat_deny or chat_answer %}
-        <section class="chat-result">
+        <section
+          class="chat-result"
+          data-testid="chat-live"
+          data-run-id="{{ chat_run_id or '' }}"
+          data-run-status="{{ chat_run_status or '' }}"
+          {% if ticket is defined %}data-ticket-id="{{ ticket.id }}"{% endif %}
+        >
           {% if chat_run_id %}
           <p class="chat-meta">
             <span>run_id=<span class="mono">{{ chat_run_id }}</span></span>
             <span>{{ chat_run_status }}</span>
             {% if chat_outcome %}<span>{{ chat_outcome }}</span>{% endif %}
             <a href="/api/runs/{{ chat_run_id }}/events">SSE</a>
+            {% if not chat_run_done %}
+            <button type="button" class="ghost" data-testid="run-cancel">取消</button>
+            {% endif %}
           </p>
+          {% endif %}
+          <div data-testid="chat-steps" id="chat-steps" class="chat-steps"></div>
+          {% if chat_run_done %}
+          <p class="sr-only" data-testid="run-done">{{ chat_run_status }}</p>
           {% endif %}
           {% if chat_clarify %}
           <div class="flash-warn">

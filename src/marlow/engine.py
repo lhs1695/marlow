@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from collections.abc import Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,6 +28,7 @@ from marlow.codes import (
     NOT_ENOUGH_INFO,
     RETRYABLE_TIMEOUT,
     RUN_ADMITTED,
+    RUN_CANCELLED,
     RUN_COMPLETED,
     RUN_CREATED,
     RUN_FAILED,
@@ -51,6 +54,10 @@ DEGRADE_ANSWER = "资产读取超时，已降级。未编造资产配置或关�
 HITL_ANSWER = "权限变更草案已提交，等待管理员审批。本 Run 不续跑。"
 DENY_ANSWER = "变更未生效：网关拒绝。entitlements 未改。"
 MAX_STEPS_ANSWER = "已达步数上限，安全停止，未关单。"
+CANCEL_ANSWER = "任务已取消。"
+
+OnEvent = Callable[[dict[str, Any]], None]
+_ON_EVENT: ContextVar[OnEvent | None] = ContextVar("marlow_on_event", default=None)
 
 
 @dataclass
@@ -110,8 +117,31 @@ def _set_status(session: Session, run: Run, status: str) -> None:
 
 def _emit(session: Session, run: Run, event_kind: str, **payload: Any) -> None:
     blob = redact_secrets(json.dumps(payload, ensure_ascii=False))
-    session.add(RunEvent(run_id=run.id, kind=event_kind, payload=blob))
+    event = RunEvent(run_id=run.id, kind=event_kind, payload=blob)
+    session.add(event)
+    session.flush()
+    event_id = event.id
+    snapshot = {
+        "id": event_id,
+        "run_id": run.id,
+        "kind": event.kind,
+        "payload": event.payload,
+        "request_id": run.request_id,
+        "trace_id": run.trace_id,
+        "status": run.status,
+        "outcome_code": run.outcome_code,
+        "final_answer": run.final_answer,
+    }
     _persist(session)
+    callback = _ON_EVENT.get()
+    if callback is None:
+        return
+    callback(snapshot)
+
+
+def _cancel_requested(session: Session, run: Run) -> bool:
+    session.refresh(run, attribute_names=["cancel_requested"])
+    return bool(run.cancel_requested)
 
 
 def _charge(run: Run, limits: RunLimits) -> str | None:
@@ -127,23 +157,14 @@ def _charge(run: Run, limits: RunLimits) -> str | None:
     return None
 
 
-def start_run(
+def create_run(
     session: Session,
     *,
     actor_id: str,
     user_text: str,
     case_id: str | None = None,
     session_id: str | None = None,
-    faults: FaultHooks | None = None,
-    provider: ActionProvider | None = None,
-    limits: RunLimits | None = None,
-    real: bool = False,
-    llm_client: Any | None = None,
-    tool_client: ToolClient | None = None,
 ) -> Run:
-    limits = limits or RunLimits()
-    hooks = faults or FaultHooks()
-    client = resolve_tool_client(session, hooks, tool_client)
     ticket_id = extract_ticket_id(user_text)
     agent_session = _session(session, session_id=session_id, actor_id=actor_id)
     run_id = _new_id()
@@ -157,11 +178,127 @@ def start_run(
         user_text=user_text,
         status=RUN_CREATED,
         ticket_id=ticket_id,
+        cancel_requested=False,
     )
     session.add(run)
     session.flush()
     _emit(session, run, "state", status=RUN_CREATED)
     _set_status(session, run, RUN_ADMITTED)
+    return run
+
+
+def run_and_wait(
+    session: Session,
+    *,
+    actor_id: str,
+    user_text: str,
+    case_id: str | None = None,
+    session_id: str | None = None,
+    faults: FaultHooks | None = None,
+    provider: ActionProvider | None = None,
+    limits: RunLimits | None = None,
+    real: bool = False,
+    llm_client: Any | None = None,
+    tool_client: ToolClient | None = None,
+) -> Run:
+    """Synchronous Run for CLI. Web enqueues onto the worker instead."""
+    return start_run(
+        session,
+        actor_id=actor_id,
+        user_text=user_text,
+        case_id=case_id,
+        session_id=session_id,
+        faults=faults,
+        provider=provider,
+        limits=limits,
+        real=real,
+        llm_client=llm_client,
+        tool_client=tool_client,
+    )
+
+
+def start_run(
+    session: Session,
+    *,
+    actor_id: str,
+    user_text: str,
+    case_id: str | None = None,
+    session_id: str | None = None,
+    faults: FaultHooks | None = None,
+    provider: ActionProvider | None = None,
+    limits: RunLimits | None = None,
+    real: bool = False,
+    llm_client: Any | None = None,
+    tool_client: ToolClient | None = None,
+    run_id: str | None = None,
+    on_event: OnEvent | None = None,
+) -> Run:
+    token = _ON_EVENT.set(on_event)
+    try:
+        return _start_run(
+            session,
+            actor_id=actor_id,
+            user_text=user_text,
+            case_id=case_id,
+            session_id=session_id,
+            faults=faults,
+            provider=provider,
+            limits=limits,
+            real=real,
+            llm_client=llm_client,
+            tool_client=tool_client,
+            run_id=run_id,
+        )
+    finally:
+        _ON_EVENT.reset(token)
+
+
+def _start_run(
+    session: Session,
+    *,
+    actor_id: str,
+    user_text: str,
+    case_id: str | None = None,
+    session_id: str | None = None,
+    faults: FaultHooks | None = None,
+    provider: ActionProvider | None = None,
+    limits: RunLimits | None = None,
+    real: bool = False,
+    llm_client: Any | None = None,
+    tool_client: ToolClient | None = None,
+    run_id: str | None = None,
+) -> Run:
+    limits = limits or RunLimits()
+    hooks = faults or FaultHooks()
+    client = resolve_tool_client(session, hooks, tool_client)
+    if run_id is not None:
+        run = session.get(Run, run_id)
+        if run is None:
+            raise ValueError(f"run not found: {run_id}")
+        actor_id = run.actor_id
+        user_text = run.user_text
+        if case_id is None:
+            case_id = run.case_id
+        ticket_id = run.ticket_id
+        agent_session = session.get(AgentSession, run.session_id)
+        if agent_session is None:
+            raise ValueError(f"session not found: {run.session_id}")
+    else:
+        run = create_run(
+            session,
+            actor_id=actor_id,
+            user_text=user_text,
+            case_id=case_id,
+            session_id=session_id,
+        )
+        ticket_id = run.ticket_id
+        agent_session = session.get(AgentSession, run.session_id)
+        if agent_session is None:
+            raise ValueError("session not found")
+
+    if _cancel_requested(session, run):
+        _finish(session, run, agent_session, RUN_CANCELLED, RUN_CANCELLED, CANCEL_ANSWER, {})
+        return run
 
     if ticket_id is None:
         _emit(session, run, "clarify", code=NOT_ENOUGH_INFO, message=CLARIFY_ANSWER)
@@ -183,6 +320,9 @@ def start_run(
     feedback: StepFeedback | None = None
 
     while True:
+        if _cancel_requested(session, run):
+            _finish(session, run, agent_session, RUN_CANCELLED, RUN_CANCELLED, CANCEL_ANSWER, verified)
+            return run
         brake = _charge(run, limits)
         if brake:
             _emit(session, run, "brake", code=brake, steps=run.step_count)

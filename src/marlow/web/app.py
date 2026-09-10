@@ -4,31 +4,34 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
 from marlow.codes import (
     DECISION_APPROVE,
     ROLE_ADMIN,
     RUN_WAITING_APPROVAL,
+    TERMINAL_RUN_STATUSES,
     TICKET_NOT_FOUND,
     UNAUTHORIZED,
 )
 from marlow.db import make_engine, prepare_database
-from marlow.engine import http_fake_case_id, http_fake_faults, start_run
+from marlow.engine import create_run, http_fake_case_id
 from marlow.gateway import apply_entitlement_change
 from marlow.llm import want_real_llm
 from marlow.models import Employee, Run, RunEvent
+from marlow.runner import RunWorker
 from marlow.tools.tickets import get_ticket
 from marlow.web.auth import SESSION_ACTOR_KEY, actor_from_session, login_actor_id
 from marlow.web.deps import Db, enforce_limit
@@ -84,11 +87,20 @@ def create_app(
         prepare_database(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     secret = session_secret or os.environ.get(SESSION_SECRET_ENV, DEFAULT_SESSION_SECRET)
-    app = FastAPI(title="Marlow")
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        worker: RunWorker = app.state.runner
+        await worker.start()
+        yield
+        await worker.stop()
+
+    app = FastAPI(title="Marlow", lifespan=lifespan)
     app.add_middleware(SessionMiddleware, secret_key=secret)
     app.state.engine = engine
     app.state.session_factory = factory
     app.state.limiter = limiter or MemoryRateLimiter()
+    app.state.runner = RunWorker(engine)
 
     from marlow.web.pages import register_pages
 
@@ -140,21 +152,33 @@ def create_app(
         return {"ticket": obs.data["ticket"], "comments": obs.data["comments"]}
 
     @app.post("/api/runs")
-    def create_run(body: CreateRunBody, request: Request, db: Db) -> dict[str, Any]:
-        actor = actor_from_session(request, db)
+    async def create_run_api(body: CreateRunBody, request: Request) -> JSONResponse:
         enforce_limit(request, "runs")
         text = body.text
         if len(text) > MAX_INPUT_CHARS:
             raise HTTPException(status_code=400, detail="input_too_long")
-        run = start_run(
-            db,
-            actor_id=actor.id,
-            user_text=text,
-            case_id=http_fake_case_id(text),
-            faults=http_fake_faults(text),
-            real=want_real_llm(),
-        )
-        db.commit()
+        factory: sessionmaker[Session] = request.app.state.session_factory
+        with factory() as db:
+            actor = actor_from_session(request, db)
+            run = create_run(
+                db,
+                actor_id=actor.id,
+                user_text=text,
+                case_id=http_fake_case_id(text),
+            )
+            payload = {
+                "run_id": run.id,
+                "request_id": run.request_id,
+                "trace_id": run.trace_id,
+            }
+        worker: RunWorker = request.app.state.runner
+        await worker.submit(payload["run_id"], real=want_real_llm())
+        return JSONResponse(payload, status_code=202)
+
+    @app.get("/api/runs/{run_id}")
+    def get_run(run_id: str, request: Request, db: Db) -> dict[str, Any]:
+        actor = actor_from_session(request, db)
+        run = _run_for_actor(db, run_id, actor)
         return {
             "run_id": run.id,
             "request_id": run.request_id,
@@ -162,33 +186,49 @@ def create_app(
             "status": run.status,
             "outcome_code": run.outcome_code,
             "final_answer": run.final_answer,
+            "cancel_requested": bool(run.cancel_requested),
+        }
+
+    @app.post("/api/runs/{run_id}/cancel")
+    def cancel_run(run_id: str, request: Request, db: Db) -> dict[str, Any]:
+        actor = actor_from_session(request, db)
+        run = _run_for_actor(db, run_id, actor)
+        run.cancel_requested = True
+        db.commit()
+        return {
+            "run_id": run.id,
+            "cancel_requested": True,
+            "status": run.status,
         }
 
     @app.get("/api/runs/{run_id}/events")
-    def run_event_stream(run_id: str, request: Request, db: Db) -> StreamingResponse:
-        actor = actor_from_session(request, db)
-        run = db.get(Run, run_id)
-        if run is None:
-            raise HTTPException(status_code=404, detail="not_found")
-        if run.actor_id != actor.id and actor.role != ROLE_ADMIN:
-            raise HTTPException(status_code=403, detail=UNAUTHORIZED)
-        rows = list(db.scalars(select(RunEvent).where(RunEvent.run_id == run.id).order_by(RunEvent.id)))
-        frames = [_sse_frame(row.kind, row.payload, run.request_id, run.trace_id) for row in rows]
-        if run.status == RUN_WAITING_APPROVAL:
-            frames.append(
-                _sse_frame(
-                    "waiting_approval",
-                    json.dumps({"status": run.status}, ensure_ascii=False),
-                    run.request_id,
-                    run.trace_id,
-                )
-            )
+    async def run_event_stream(run_id: str, request: Request) -> StreamingResponse:
+        factory: sessionmaker[Session] = request.app.state.session_factory
+        with factory() as db:
+            actor = actor_from_session(request, db)
+            run = _run_for_actor(db, run_id, actor)
+            request_id = run.request_id
+            trace_id = run.trace_id
+        last_id = _last_event_id(request)
+        worker: RunWorker = request.app.state.runner
+        engine: Engine = request.app.state.engine
 
-        def gen() -> Iterator[str]:
-            for frame in frames:
+        async def gen() -> AsyncIterator[str]:
+            async for frame in iter_run_sse(
+                worker,
+                engine,
+                run_id,
+                last_id=last_id,
+                request_id=request_id,
+                trace_id=trace_id,
+            ):
                 yield frame
 
-        return StreamingResponse(gen(), media_type="text/event-stream")
+        return StreamingResponse(
+            gen(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        )
 
     @app.post("/api/entitlements")
     def entitlement_change(body: EntitlementBody, request: Request, db: Db) -> dict[str, Any]:
@@ -214,6 +254,107 @@ def create_app(
     return app
 
 
+def _run_for_actor(db: Session, run_id: str, actor: Employee) -> Run:
+    run = db.get(Run, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="not_found")
+    if run.actor_id != actor.id and actor.role != ROLE_ADMIN:
+        raise HTTPException(status_code=403, detail=UNAUTHORIZED)
+    return run
+
+
+def _last_event_id(request: Request) -> int:
+    raw = request.headers.get("last-event-id") or "0"
+    try:
+        value = int(raw)
+    except ValueError:
+        return 0
+    return value if value > 0 else 0
+
+
+def _is_terminal_status(status: str | None) -> bool:
+    return status in TERMINAL_RUN_STATUSES
+
+
+def _status_from_payload(kind: str, payload: str, fallback: str | None = None) -> str | None:
+    if kind != "state":
+        return fallback
+    try:
+        data = json.loads(payload) if payload else {}
+    except json.JSONDecodeError:
+        return fallback
+    if isinstance(data, dict) and isinstance(data.get("status"), str):
+        return data["status"]
+    return fallback
+
+
+async def iter_run_sse(
+    worker: RunWorker,
+    engine: Engine,
+    run_id: str,
+    *,
+    last_id: int,
+    request_id: str,
+    trace_id: str,
+) -> AsyncIterator[str]:
+    queue = worker.subscribe(run_id)
+    seen: set[int] = set()
+    try:
+        with Session(engine) as session:
+            rows = list(
+                session.scalars(
+                    select(RunEvent)
+                    .where(RunEvent.run_id == run_id, RunEvent.id > last_id)
+                    .order_by(RunEvent.id)
+                )
+            )
+            run = session.get(Run, run_id)
+            status = None if run is None else run.status
+        for row in rows:
+            yield _sse_frame(row.kind, row.payload, request_id, trace_id, event_id=row.id)
+            seen.add(row.id)
+            status = _status_from_payload(row.kind, row.payload, status)
+        if status == RUN_WAITING_APPROVAL:
+            yield _sse_frame(
+                "waiting_approval",
+                json.dumps({"status": status}, ensure_ascii=False),
+                request_id,
+                trace_id,
+            )
+        if _is_terminal_status(status):
+            yield _sse_done_frame(request_id, trace_id)
+            return
+        while True:
+            item = await queue.get()
+            event_id = item.get("id")
+            if isinstance(event_id, int):
+                if event_id <= last_id or event_id in seen:
+                    continue
+                seen.add(event_id)
+            kind = str(item.get("kind") or "")
+            payload = str(item.get("payload") or "{}")
+            yield _sse_frame(
+                kind,
+                payload,
+                request_id,
+                trace_id,
+                event_id=event_id if isinstance(event_id, int) else None,
+            )
+            status = _status_from_payload(kind, payload, str(item.get("status") or status) or None)
+            if status == RUN_WAITING_APPROVAL:
+                yield _sse_frame(
+                    "waiting_approval",
+                    json.dumps({"status": status}, ensure_ascii=False),
+                    request_id,
+                    trace_id,
+                )
+            if _is_terminal_status(status):
+                yield _sse_done_frame(request_id, trace_id)
+                return
+    finally:
+        worker.unsubscribe(run_id, queue)
+
+
 def _sse_event_name(kind: str) -> str:
     if kind in {"observation", "retry"}:
         return "tool"
@@ -224,7 +365,13 @@ def _sse_event_name(kind: str) -> str:
     return kind
 
 
-def _sse_frame(kind: str, payload: str, request_id: str, trace_id: str) -> str:
+def _sse_frame(
+    kind: str,
+    payload: str,
+    request_id: str,
+    trace_id: str,
+    event_id: int | None = None,
+) -> str:
     try:
         data = json.loads(payload) if payload else {}
     except json.JSONDecodeError:
@@ -235,4 +382,15 @@ def _sse_frame(kind: str, payload: str, request_id: str, trace_id: str) -> str:
     data["request_id"] = request_id
     data["trace_id"] = trace_id
     blob = json.dumps(data, ensure_ascii=False)
-    return f"event: {_sse_event_name(kind)}\ndata: {blob}\n\n"
+    lines = []
+    if event_id is not None:
+        lines.append(f"id: {event_id}")
+    lines.append(f"event: {_sse_event_name(kind)}")
+    lines.append(f"data: {blob}")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def _sse_done_frame(request_id: str, trace_id: str) -> str:
+    blob = json.dumps({"kind": "done", "request_id": request_id, "trace_id": trace_id}, ensure_ascii=False)
+    return f"event: done\ndata: {blob}\n\n"

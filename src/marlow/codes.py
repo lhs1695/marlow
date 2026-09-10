@@ -27,6 +27,7 @@ RUN_WAITING_APPROVAL = "waiting_approval"
 RUN_COMPLETED = "completed"
 RUN_FAILED = "failed"
 RUN_CANCELLED = "cancelled"
+TERMINAL_RUN_STATUSES = frozenset({RUN_COMPLETED, RUN_FAILED, RUN_CANCELLED})
 
 ACTION_ANSWER = "answer"
 ACTION_SKILL = "skill"

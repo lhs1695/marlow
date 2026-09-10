@@ -16,16 +16,19 @@ from marlow.codes import (
     PERM_EDITOR,
     QUEUE_CHANGE,
     ROLE_ADMIN,
+    RUN_CANCELLED,
     STATUS_WAITING_APPROVAL,
     SYSTEM_GRAFANA,
+    TERMINAL_RUN_STATUSES,
     TICKET_NOT_FOUND,
     UNAUTHORIZED,
 )
 from marlow.comments import add_ticket_comment
-from marlow.engine import http_fake_case_id, http_fake_faults, start_run
+from marlow.engine import create_run, http_fake_case_id
 from marlow.gateway import apply_entitlement_change, entitlement_permission
 from marlow.llm import want_real_llm
-from marlow.models import AuditEvent, Ticket
+from marlow.models import AuditEvent, Run, Ticket
+from marlow.runner import RunWorker
 from marlow.tools.tickets import get_ticket, search_tickets
 from marlow.web.auth import SESSION_ACTOR_KEY, actor_from_session
 from marlow.web.deps import Db, enforce_limit
@@ -57,9 +60,9 @@ _CHAT_SESSION_KEYS = (
 )
 
 
-def _page_ctx(request: Request, actor, **extra):
+def _page_ctx(request: Request, actor, db=None, **extra):
     query_role = request.query_params.get("role")
-    return {
+    ctx = {
         "request": request,
         "actor": actor,
         "query_role": query_role,
@@ -71,8 +74,56 @@ def _page_ctx(request: Request, actor, **extra):
         "chat_run_status": request.session.get("chat_run_status"),
         "chat_outcome": request.session.get("chat_outcome"),
         "chat_text": request.session.get("chat_text"),
+        "chat_run_done": False,
         **extra,
     }
+    if db is not None:
+        _hydrate_chat(request, db, actor, ctx)
+    return ctx
+
+
+def _hydrate_chat(request: Request, db, actor, ctx: dict) -> None:
+    """Re-query Run on this request's session. Never use a worker-owned ORM object."""
+    run_id = request.query_params.get("run_id") or request.session.get("chat_run_id")
+    if not run_id:
+        return
+    run = db.get(Run, run_id)
+    if run is None:
+        return
+    if run.actor_id != actor.id and actor.role != ROLE_ADMIN:
+        return
+    ctx["chat_run_id"] = run.id
+    ctx["chat_run_status"] = run.status
+    ctx["chat_outcome"] = run.outcome_code or ""
+    if not ctx.get("chat_text"):
+        ctx["chat_text"] = request.session.get("chat_text") or run.user_text
+    ctx["chat_run_done"] = run.status in TERMINAL_RUN_STATUSES
+    if run.status not in TERMINAL_RUN_STATUSES:
+        ctx["chat_clarify"] = None
+        ctx["chat_deny"] = None
+        ctx["chat_answer"] = None
+        return
+    if run.outcome_code == NOT_ENOUGH_INFO:
+        ctx["chat_clarify"] = run.final_answer or ""
+        ctx["chat_deny"] = None
+        ctx["chat_answer"] = None
+    elif run.outcome_code == UNAUTHORIZED:
+        ctx["chat_deny"] = run.final_answer or ""
+        ctx["chat_clarify"] = None
+        ctx["chat_answer"] = None
+    else:
+        ctx["chat_answer"] = run.final_answer or ""
+        ctx["chat_clarify"] = None
+        ctx["chat_deny"] = None
+    if run.status == RUN_CANCELLED:
+        ctx["chat_answer"] = run.final_answer or ""
+
+
+def _with_run_id(nxt: str, run_id: str) -> str:
+    if "run_id=" in nxt:
+        return nxt
+    sep = "&" if "?" in nxt else "?"
+    return f"{nxt}{sep}run_id={run_id}"
 
 
 def register_pages(app: FastAPI) -> None:
@@ -87,7 +138,7 @@ def register_pages(app: FastAPI) -> None:
         actor = actor_from_session(request, db)
         obs = search_tickets(db, actor_id=actor.id, query="")
         tickets = (obs.data or {}).get("tickets") or []
-        return TEMPLATES.TemplateResponse(request, "tickets.html", _page_ctx(request, actor, tickets=tickets))
+        return TEMPLATES.TemplateResponse(request, "tickets.html", _page_ctx(request, actor, db, tickets=tickets))
 
     @app.get("/tickets/{ticket_id}")
     def ticket_detail(ticket_id: str, request: Request, db: Db):
@@ -121,6 +172,7 @@ def register_pages(app: FastAPI) -> None:
             _page_ctx(
                 request,
                 actor,
+                db,
                 ticket=ticket,
                 comments=comments,
                 audits=audits,
@@ -155,7 +207,7 @@ def register_pages(app: FastAPI) -> None:
                 .order_by(Ticket.id)
             )
         )
-        return TEMPLATES.TemplateResponse(request, "approvals.html", _page_ctx(request, actor, tickets=rows))
+        return TEMPLATES.TemplateResponse(request, "approvals.html", _page_ctx(request, actor, db, tickets=rows))
 
     @app.post("/approvals")
     async def html_approval(request: Request, db: Db):
@@ -186,8 +238,7 @@ def register_pages(app: FastAPI) -> None:
         return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
 
     @app.post("/chat")
-    async def html_chat(request: Request, db: Db):
-        actor = actor_from_session(request, db)
+    async def html_chat(request: Request):
         enforce_limit(request, "runs")
         form = await request.form()
         text = str(form.get("text") or "")
@@ -196,25 +247,20 @@ def register_pages(app: FastAPI) -> None:
             nxt = "/tickets"
         if len(text) > MAX_INPUT_CHARS:
             raise HTTPException(status_code=400, detail="input_too_long")
-        run = start_run(
-            db,
-            actor_id=actor.id,
-            user_text=text,
-            case_id=http_fake_case_id(text),
-            faults=http_fake_faults(text),
-            real=want_real_llm(),
-        )
+        factory = request.app.state.session_factory
+        with factory() as db:
+            actor = actor_from_session(request, db)
+            run = create_run(
+                db,
+                actor_id=actor.id,
+                user_text=text,
+                case_id=http_fake_case_id(text),
+            )
+            run_id = run.id
+        worker: RunWorker = request.app.state.runner
+        await worker.submit(run_id, real=want_real_llm())
         for key in _CHAT_SESSION_KEYS:
             request.session.pop(key, None)
-        request.session["chat_run_id"] = run.id
-        request.session["chat_run_status"] = run.status
-        request.session["chat_outcome"] = run.outcome_code or ""
+        request.session["chat_run_id"] = run_id
         request.session["chat_text"] = text
-        if run.outcome_code == NOT_ENOUGH_INFO:
-            request.session["chat_clarify"] = run.final_answer or ""
-        elif run.outcome_code == UNAUTHORIZED:
-            request.session["chat_deny"] = run.final_answer or ""
-        else:
-            request.session["chat_answer"] = run.final_answer or ""
-        db.commit()
-        return RedirectResponse(nxt, status_code=303)
+        return RedirectResponse(_with_run_id(nxt, run_id), status_code=303)

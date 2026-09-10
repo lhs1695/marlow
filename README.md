@@ -36,7 +36,7 @@ uv run python -m marlow.web
 - 一线：`l1` / `l1-demo`（只见自己队列里的工单）
 - 管理员：`admin` / `admin-demo`（能进审批队列）
 
-角色只来自这次登录，忽略 URL 上的 `?role=`。对话步骤流见 CLI 打印的事件，或 `GET /api/runs/{id}/events`。GitHub Actions（`.github/workflows/fake-eval.yml`）跑 Fake `pytest`，另有 `keyline` job；仓库 Secrets 不配模型 Key。
+角色只来自这次登录，忽略 URL 上的 `?role=`。对话提交后立刻入队，步骤用浏览器原生 `EventSource` 订阅 `GET /api/runs/{id}/events`（支持 `Last-Event-ID` 断线重连）；关掉页面**不会**取消 Run，取消走 `POST /api/runs/{id}/cancel`，只在步与步之间生效。GitHub Actions（`.github/workflows/fake-eval.yml`）跑 Fake `pytest`，另有 `keyline` job；仓库 Secrets 不配模型 Key。
 
 ## 目录
 
@@ -46,7 +46,7 @@ uv run python -m marlow.web
 | 写员工权限 | `src/marlow/gateway.py` |
 | 查单 / 搜手册 / 读资产 / 写评论 / 改权限 | `src/marlow/tools/`；MCP 薄壳 `ticket_mcp.py` |
 | Skill 骨架 | `src/marlow/skills/` |
-| Run 状态机 | `src/marlow/engine.py`；Fake `fake.py` |
+| Run 状态机 | `src/marlow/engine.py`；Fake `fake.py`；worker `runner.py`（并发度 1，事件内存 fan-out） |
 | 真模型适配 | `src/marlow/llm.py` |
 | 手册切片（Grafana 10.4） | `src/marlow/kb/`；CI 夹具不打 Embedding |
 | 登录与四页 | `src/marlow/web/`（`data-testid`：`testids.py`） |

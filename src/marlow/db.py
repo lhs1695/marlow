@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, event, select
+from sqlalchemy import create_engine, event, inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -38,7 +38,19 @@ def make_engine(url: str = "sqlite:///:memory:") -> Engine:
             cursor.close()
 
     Base.metadata.create_all(engine)
+    _ensure_run_cancel_column(engine)
     return engine
+
+
+def _ensure_run_cancel_column(engine: Engine) -> None:
+    inspector = inspect(engine)
+    if "runs" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("runs")}
+    if "cancel_requested" in columns:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE runs ADD COLUMN cancel_requested BOOLEAN NOT NULL DEFAULT 0"))
 
 
 def prepare_database(engine: Engine) -> None:

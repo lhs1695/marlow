@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from marlow.codes import DECISION_REJECT, PERM_EDITOR, SYSTEM_GRAFANA
 from marlow.db import make_engine, prepare_database
-from marlow.engine import start_run, ticket_status
+from marlow.engine import run_and_wait, ticket_status
 from marlow.faults import FAULT_TIMEOUT, FaultHooks
 from marlow.gateway import apply_entitlement_change, entitlement_permission
 from marlow.live import live_run_record
@@ -77,7 +77,7 @@ def run_demo_case(
             print("provider=fake")
     provider = OpenAIActionProvider(spec["text"], client=llm_client) if used_openai else None
     started = time.perf_counter()
-    run = start_run(
+    run = run_and_wait(
         session,
         actor_id=L1_ID,
         user_text=spec["text"],

@@ -142,6 +142,7 @@ class Run(Base):
     cost_cents: Mapped[int] = mapped_column(default=0)
     outcome_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     final_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     agent_session: Mapped[AgentSession] = relationship(back_populates="runs")
     events: Mapped[list[RunEvent]] = relationship(back_populates="run")

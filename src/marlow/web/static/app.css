@@ -361,6 +361,21 @@ textarea, input[type="text"] {
   gap: 1rem;
   flex-wrap: wrap;
   margin: 0 0 0.5rem;
+  align-items: center;
+}
+
+.chat-steps {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.55rem;
+}
+.chat-step {
+  font-size: 0.82rem;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.4rem 0.65rem;
 }
 
 .timeline {
