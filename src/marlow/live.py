@@ -133,6 +133,7 @@ def error_run_record(
         "assess_evidence_calls": 0,
         "assess_prompt_tokens": 0,
         "assess_completion_tokens": 0,
+        "assess_evidence": [],
         "chat_model": "",
         "error": redact_secrets(error),
     }
@@ -186,6 +187,48 @@ def _report_path(date: str, chat_model: str, embedding_model: str, dest: Path | 
     return REPORT_DIR / f"{date}-{safe_chat}-{safe_embed}.json"
 
 
+def _assess_input_record(payload: dict[str, Any]) -> dict[str, Any]:
+    hits = payload.get("kb_hits") or []
+    hit_rows: list[dict[str, Any]] = []
+    for hit in hits:
+        if not isinstance(hit, dict):
+            continue
+        text = redact_secrets(str(hit.get("text") or ""))
+        hit_rows.append(
+            {
+                "doc_id": hit.get("doc_id"),
+                "version": hit.get("version"),
+                "text": text,
+                "text_chars": len(text),
+            }
+        )
+    return {
+        "keys": sorted(str(key) for key in payload.keys()),
+        "ticket_id": payload.get("ticket_id"),
+        "title": redact_secrets(str(payload.get("title") or "")),
+        "description": redact_secrets(str(payload.get("description") or "")),
+        "status": payload.get("status"),
+        "queue": payload.get("queue"),
+        "kb_doc_id": payload.get("kb_doc_id"),
+        "kb_version": payload.get("kb_version"),
+        "reason": redact_secrets(str(payload.get("reason") or "")),
+        "has_draft_reason": bool(str(payload.get("reason") or "").strip()),
+        "has_ticket_comments": "comments" in payload and bool(payload.get("comments")),
+        "has_hit_text": any(bool(row["text"].strip()) for row in hit_rows),
+        "kb_hits": hit_rows,
+    }
+
+
+def _assess_result_record(result: Any) -> dict[str, Any]:
+    if result is None:
+        return {"sufficient": None, "missing": [], "reason": None}
+    return {
+        "sufficient": bool(getattr(result, "sufficient", False)),
+        "missing": [str(item) for item in (getattr(result, "missing", None) or [])],
+        "reason": redact_secrets(str(getattr(result, "reason", "") or "")),
+    }
+
+
 class _ProviderUsage:
     """Collector-side probe. Does not change OpenAIActionProvider behavior, only wraps it."""
 
@@ -194,6 +237,7 @@ class _ProviderUsage:
         self.assess_calls = 0
         self.assess_prompt_tokens = 0
         self.assess_completion_tokens = 0
+        self.assessments: list[dict[str, Any]] = []
 
     def totals(self) -> SimpleNamespace:
         prompt = sum(int(getattr(row, "prompt_tokens", 0) or 0) for row in self.instances)
@@ -219,12 +263,20 @@ def _track_openai_usage() -> Iterator[_ProviderUsage]:
     def assess(provider: Any, payload: dict[str, Any]) -> Any:
         before_prompt = int(getattr(provider, "prompt_tokens", 0) or 0)
         before_completion = int(getattr(provider, "completion_tokens", 0) or 0)
+        result = None
         try:
-            return orig_assess(provider, payload)
+            result = orig_assess(provider, payload)
+            return result
         finally:
             probe.assess_calls += 1
             probe.assess_prompt_tokens += int(getattr(provider, "prompt_tokens", 0) or 0) - before_prompt
             probe.assess_completion_tokens += int(getattr(provider, "completion_tokens", 0) or 0) - before_completion
+            probe.assessments.append(
+                {
+                    "input": _assess_input_record(payload if isinstance(payload, dict) else {}),
+                    **_assess_result_record(result),
+                }
+            )
 
     OpenAIActionProvider.__init__ = init  # type: ignore[method-assign]
     OpenAIActionProvider.assess_evidence = assess  # type: ignore[method-assign]
@@ -383,6 +435,7 @@ def _collect_http_case(engine: Engine, case: int, spec: dict[str, str], *, real:
                     "assess_evidence_calls": probe.assess_calls,
                     "assess_prompt_tokens": probe.assess_prompt_tokens,
                     "assess_completion_tokens": probe.assess_completion_tokens,
+                    "assess_evidence": probe.assessments,
                 }
                 if case == 4:
                     extra.update(_case4_extra(session))
@@ -478,6 +531,29 @@ def main(argv: list[str] | None = None) -> int:
             f"assess_completion={row.get('assess_completion_tokens')} "
             f"outcome={outcome} ticket_status={ticket}"
         )
+        for j, assess in enumerate(row.get("assess_evidence") or [], start=1):
+            incoming = assess.get("input") or {}
+            print(
+                f"  assess {j} sufficient={assess.get('sufficient')} "
+                f"missing={assess.get('missing')!r} reason={assess.get('reason')!r}"
+            )
+            print(
+                f"  assess {j} input keys={incoming.get('keys')} "
+                f"ticket_id={incoming.get('ticket_id')} "
+                f"kb={incoming.get('kb_doc_id')}@{incoming.get('kb_version')} "
+                f"has_draft_reason={incoming.get('has_draft_reason')} "
+                f"has_ticket_comments={incoming.get('has_ticket_comments')} "
+                f"has_hit_text={incoming.get('has_hit_text')} "
+                f"hit_chars={[hit.get('text_chars') for hit in incoming.get('kb_hits') or []]}"
+            )
+            print(f"  assess {j} draft={incoming.get('reason')!r}")
+            print(f"  assess {j} title={incoming.get('title')!r}")
+            print(f"  assess {j} description={incoming.get('description')!r}")
+            for hit in incoming.get("kb_hits") or []:
+                print(
+                    f"  assess {j} hit {hit.get('doc_id')}@{hit.get('version')} "
+                    f"chars={hit.get('text_chars')} text={hit.get('text')!r}"
+                )
 
     appendix: dict[str, Any] | None = None
     if args.appendix:

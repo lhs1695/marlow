@@ -33,6 +33,7 @@ Writes `evals/live/reports/{date}-{chat_model}-{embedding_model}.json` (gitignor
 | `p50_first_event_ms` / `p95_first_event_ms` | Linear interpolation over those n first-event times |
 | `prompt_tokens` / `completion_tokens` | Sum of API `usage` from the collector-wrapped `OpenAIActionProvider` |
 | `assess_evidence_calls` / `assess_prompt_tokens` / `assess_completion_tokens` | Subset of that usage spent on `assess_evidence` (veto only; still included in the totals) |
+| `runs[].assess_evidence` | Each veto call: the payload actually sent (ticket fields, draft reason, cited hit text) and the raw `sufficient` / `missing` / `reason` |
 | `outcomes` / `ticket_statuses` | Per-run library end state (failures stay in the file) |
 | `runs[]` | Each attempt: latency, first_event, tokens (incl. assess split), outcome, ticket_status, citation, comments |
 | `appendix` | Only with `--appendix` |
@@ -83,3 +84,15 @@ case 2 × 10: **none** `ok` / `Resolved` (all stay `Investigating`). 9× `not_en
 p50 / p95 latency `125900.2` / `169867.6` ms. p50 / p95 first_event `47.6` / `73.6` ms. Tokens: prompt `194664` / completion `9057`, of which assess `19` calls, prompt `24818` / completion `2300`. Slowest complete Run ~172s (run 1); no ~451s stall this round. The 172s is model turns + two assess calls, not a hung HTTP client.
 
 Appendix case 1 never calls chat (no ticket id → clarify before bind, tokens 0). Cases 4/5: gateway `unauthorized`; demo admin reject left `emp-006` as Viewer.
+
+## Phase I collect (2026-09-11)
+
+Command: `uv run python -m marlow.live --appendix` with `MARLOW_KB_EMBEDDINGS=real`, `MARLOW_CHROMA_DIR=chroma-jina`, `MARLOW_CHAT_MODEL=grok-4.6`, `MARLOW_EMBEDDING_MODEL=jina-embeddings-v3`. File (gitignored): `evals/live/reports/2026-09-11-grok-4.6-jina-embeddings-v3.json`.
+
+Diagnosed Phase H double-veto as (b): evidence payload already had ticket id, draft reason, and full cited hit text; the model was re-checking production RCA the rules do not require. Only `ASSESS_SYSTEM_PROMPT` changed (draft supported by cited snippet; do not re-check rules). `max_reflect_rejections` and fail-open unchanged.
+
+case 2 × 10: 4× `ok` / `Resolved` (runs 2, 5, 9, 10, citation `grafana-login@10.4`). 5× `not_enough_info` / `Investigating` (runs 1, 3, 4, 6, 7). 1× `ok` / `Investigating` (run 8: one veto, then finished without a second close). No `get_asset` `non_retryable` this round (left for a later pass). Run 1 never reached assess (investigate-only). Samples stay in the file and in p95.
+
+p50 / p95 latency `130101.6` / `378047.0` ms. p50 / p95 first_event `36.0` / `98.7` ms. Tokens: prompt `146220` / completion `7065`, of which assess `15` calls (11 veto / 4 allow), prompt `21401` / completion `1848`. Slowest complete Run ~564s (run 6); `first_event` was 55ms, so the stall is model/network turns, not a hung HTTP client. Phase H assess calls were 19, all vetoes.
+
+Appendix case 1 never calls chat (no ticket id → clarify before bind, tokens 0). Cases 4/5: gateway `unauthorized`.

@@ -9,6 +9,7 @@ from marlow.codes import SOURCE_TRUST_INTERNAL_GATEWAY, STATUS_RESOLVED
 from marlow.engine import start_run, ticket_status
 from marlow.evidence import (
     ASSESS_EVIDENCE_TOOL,
+    ASSESS_SYSTEM_PROMPT,
     EvidenceAssessment,
     allow_close_after_reflect,
     assessment_from_payload,
@@ -286,6 +287,37 @@ def test_action_from_payload_and_report_redact(tmp_path: Path, monkeypatch) -> N
     assert "sk-report-secret-aaa" not in text
     assert "gpt-4o-mini" in text
     assert "2026-09-08" in text
+
+
+def test_assess_prompt_judges_draft_support_not_rule_rerun() -> None:
+    client = _stub_client([])
+    provider = OpenAIActionProvider("请调查 INC-1001 并关单", client=client, model="stub-assess")
+    out = provider.assess_evidence(
+        {
+            "ticket_id": "INC-1001",
+            "title": "Cannot log in to Grafana",
+            "description": "Requester cannot log in to Grafana production.",
+            "kb_doc_id": "grafana-login",
+            "kb_version": "10.4",
+            "reason": "Closing per grafana-login@10.4 sign-in steps.",
+            "kb_hits": [
+                {
+                    "doc_id": "grafana-login",
+                    "version": "10.4",
+                    "text": "Grafana login: users sign in with the configured authentication.",
+                }
+            ],
+        }
+    )
+    assert out is not None
+    assert out.sufficient is True
+    call = client.chat.completions.calls[-1]
+    system = call["messages"][0]["content"]
+    assert system == ASSESS_SYSTEM_PROMPT
+    assert "is the draft close comment supported by the cited handbook snippet" in system
+    assert "Do not re-check" in system
+    assert "Do not require root-cause analysis" in system
+    assert call["tools"][0]["function"]["name"] == "assess_evidence"
 
 
 def test_assess_evidence_schema_is_not_emit_action() -> None:
