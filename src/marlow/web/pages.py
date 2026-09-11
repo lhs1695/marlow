@@ -35,6 +35,7 @@ from marlow.web.deps import Db, enforce_limit
 from marlow.web.display import (
     queue_zh,
     role_zh,
+    run_status_zh,
     show_change_decisions,
     status_tone,
     status_zh,
@@ -47,6 +48,7 @@ TEMPLATES.env.globals.update(
     queue_zh=queue_zh,
     status_zh=status_zh,
     status_tone=status_tone,
+    run_status_zh=run_status_zh,
 )
 
 _CHAT_SESSION_KEYS = (

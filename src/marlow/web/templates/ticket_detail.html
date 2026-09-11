@@ -12,7 +12,7 @@
   <dl class="meta-grid">
     <dt>状态</dt>
     <dd>
-      <span class="badge tone-{{ status_tone(ticket.status) }}">{{ status_zh(ticket.status) }}</span>
+      <span class="badge tone-{{ status_tone(ticket.status) }}" data-ticket-status-label>{{ status_zh(ticket.status) }}</span>
       <span class="sr-only" data-testid="ticket-status">{{ ticket.status }}</span>
     </dd>
     <dt>队列</dt>
@@ -47,9 +47,12 @@
     <li class="empty">暂无评论</li>
     {% endfor %}
   </ul>
-  <form method="post" action="/tickets/{{ ticket.id }}/comments" class="composer-form comment-form">
-    <textarea name="body" data-testid="comment-input" rows="2" placeholder="添加评论"></textarea>
-    <button type="submit" class="ghost" data-testid="comment-submit">提交</button>
+  <form method="post" action="/tickets/{{ ticket.id }}/comments" class="comment-form">
+    <label class="composer-label" for="comment-input">人工评论</label>
+    <div class="composer-form">
+      <textarea id="comment-input" name="body" data-testid="comment-input" rows="2" placeholder="添加评论"></textarea>
+      <button type="submit" class="ghost" data-testid="comment-submit">提交</button>
+    </div>
   </form>
 </section>
 

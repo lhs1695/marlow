@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Marlow{% endblock %}</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/app.css">
-  <script src="/static/app.js" defer></script>
+  <link rel="stylesheet" href="/static/app.css?v=2">
+  <script src="/static/app.js?v=2" defer></script>
 </head>
 <body>
   <div class="app">
@@ -47,16 +47,18 @@
         >
           {% if chat_run_id %}
           <p class="chat-meta">
-            <span>run_id=<span class="mono">{{ chat_run_id }}</span></span>
-            <span>{{ chat_run_status }}</span>
-            {% if chat_outcome %}<span>{{ chat_outcome }}</span>{% endif %}
-            <a href="/api/runs/{{ chat_run_id }}/events">SSE</a>
+            <span class="run-id" title="{{ chat_run_id }}">run_id=<span class="mono">{{ chat_run_id[:8] }}</span></span>
+            <span data-run-status-label>{{ run_status_zh(chat_run_status) }}</span>
+            <a href="/api/runs/{{ chat_run_id }}/events" title="SSE">事件流</a>
             {% if not chat_run_done %}
             <button type="button" class="ghost" data-testid="run-cancel">取消</button>
             {% endif %}
           </p>
           {% endif %}
           <div data-testid="chat-steps" id="chat-steps" class="chat-steps"></div>
+          {% if chat_run_status == 'waiting_approval' %}
+          <p class="flash-wait" data-run-wait-banner>等待管理员审批</p>
+          {% endif %}
           {% if chat_run_done %}
           <p class="sr-only" data-testid="run-done">{{ chat_run_status }}</p>
           {% elif chat_run_status == 'waiting_approval' %}
@@ -81,15 +83,20 @@
       </div>
     </main>
 
+    {% if request.url.path != '/approvals' %}
     <section class="composer" id="chat">
       <div class="composer-inner">
-        <form method="post" action="/chat" class="composer-form">
+        <form method="post" action="/chat">
           <input type="hidden" name="next" value="{{ request.url.path }}">
-          <textarea name="text" data-testid="chat-input" rows="2" placeholder="带工单号发送">{% if chat_text %}{{ chat_text }}{% endif %}</textarea>
-          <button type="submit" data-testid="chat-submit">发送</button>
+          <label class="composer-label" for="chat-input">对助手说</label>
+          <div class="composer-form">
+            <textarea id="chat-input" name="text" data-testid="chat-input" rows="2" placeholder="写工单号和要办的事">{% if chat_text %}{{ chat_text }}{% endif %}</textarea>
+            <button type="submit" data-testid="chat-submit">发送</button>
+          </div>
         </form>
       </div>
     </section>
+    {% endif %}
   </div>
 </body>
 </html>

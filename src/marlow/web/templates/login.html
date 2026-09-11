@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>登录 — Marlow</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v=2">
 </head>
 <body class="login-body">
   <section class="login-panel">
@@ -31,13 +31,13 @@
         <button type="submit" class="role-card" data-testid="login-admin">
           <span>
             <strong>管理员</strong>
-            <span class="role-hint">审批队列 · 写 entitlements</span>
+            <span class="role-hint">审批队列 · 写权限</span>
           </span>
-          <span class="role-code">Admin</span>
+          <span class="role-code">管理</span>
         </button>
       </form>
     </div>
-    <details class="examples-fold">
+    <details class="examples-fold" open>
       <summary>示例</summary>
       <ol class="examples">
         <li><code>Grafana 登录有问题，帮我看看</code></li>

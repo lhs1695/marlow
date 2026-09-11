@@ -7,6 +7,14 @@ from marlow.codes import (
     QUEUE_L1,
     ROLE_ADMIN,
     ROLE_L1,
+    RUN_ADMITTED,
+    RUN_CANCELLED,
+    RUN_COMPLETED,
+    RUN_CREATED,
+    RUN_FAILED,
+    RUN_RUNNING,
+    RUN_WAITING_APPROVAL,
+    RUN_WAITING_TOOL,
     STATUS_INVESTIGATING,
     STATUS_NEW,
     STATUS_REJECTED,
@@ -23,6 +31,16 @@ STATUS_ZH = {
     STATUS_RESOLVED: "已解决",
     STATUS_REJECTED: "已拒绝",
 }
+RUN_STATUS_ZH = {
+    RUN_CREATED: "已创建",
+    RUN_ADMITTED: "已受理",
+    RUN_RUNNING: "处理中",
+    RUN_WAITING_TOOL: "等待工具",
+    RUN_WAITING_APPROVAL: "等待审批",
+    RUN_COMPLETED: "已完成",
+    RUN_FAILED: "已失败",
+    RUN_CANCELLED: "已取消",
+}
 
 
 def role_zh(role: str) -> str:
@@ -35,6 +53,10 @@ def queue_zh(queue: str) -> str:
 
 def status_zh(status: str) -> str:
     return STATUS_ZH.get(status, status)
+
+
+def run_status_zh(status: str) -> str:
+    return RUN_STATUS_ZH.get(status, status or "")
 
 
 def status_tone(status: str) -> str:

@@ -40,6 +40,8 @@ def test_login_page_has_account_testids() -> None:
         assert f'data-testid="{LOGIN_ADMIN}"' in page.text
         assert "<summary>示例</summary>" in page.text
         assert "关单以工单库与审计终态为准" in page.text
+        assert "写权限" in page.text
+        assert "写 entitlements" not in page.text
         assert "HTTP 200" not in page.text
         assert "模型说成功" not in page.text
 

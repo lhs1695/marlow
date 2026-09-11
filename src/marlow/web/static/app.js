@@ -19,25 +19,66 @@
     failed: "已失败",
     cancelled: "已取消",
   };
+  const STATUS_LABEL = {
+    created: "已创建",
+    admitted: "已受理",
+    running: "处理中",
+    waiting_tool: "等待工具",
+    waiting_approval: "等待审批",
+    completed: "已完成",
+    failed: "已失败",
+    cancelled: "已取消",
+  };
+  const NAME_ZH = {
+    entitlement_change: "权限变更",
+    approval_gateway: "审批网关",
+    investigate: "调查",
+    close_ticket: "关单",
+    get_ticket: "读取工单",
+    get_asset: "读取资产",
+    search_tickets: "搜索工单",
+    search_kb: "搜索手册",
+    add_ticket_comment: "添加工单评论",
+    apply_entitlement_change: "审批网关",
+    kb_qa: "手册问答",
+  };
+  const TICKET_STATUS_ZH = {
+    New: "新建",
+    Investigating: "调查中",
+    "Waiting for approval": "待审批",
+    Resolved: "已解决",
+    Rejected: "已拒绝",
+  };
+  const TICKET_TONE = {
+    New: "new",
+    Investigating: "progress",
+    "Waiting for approval": "wait",
+    Resolved: "ok",
+    Rejected: "bad",
+  };
+
+  function nameZh(name) {
+    return NAME_ZH[name] || name || "";
+  }
 
   function stepText(kind, data) {
     if (kind === "state") return STATE_ZH[data.status] || "状态更新";
     if (kind === "action") {
-      if (data.action_kind === "tool") return "准备调用 " + (data.name || "工具");
-      if (data.action_kind === "skill") return "准备执行技能 " + (data.name || "");
+      if (data.action_kind === "tool") return "准备调用 " + nameZh(data.name);
+      if (data.action_kind === "skill") return "准备执行技能 " + nameZh(data.name);
       if (data.action_kind === "answer") return "正在汇总答复";
       return "下一步";
     }
     if (kind === "skill") {
-      return (data.matched ? "执行技能 " : "未匹配技能 ") + (data.name || "");
+      return (data.matched ? "执行技能 " : "未匹配技能 ") + nameZh(data.name);
     }
     if (kind === "observation") {
       const flag = data.ok ? "工具成功" : "工具失败";
-      return flag + "：" + (data.tool || "") + (data.code ? "（" + data.code + "）" : "");
+      return flag + "：" + nameZh(data.tool) + (data.code ? "（" + data.code + "）" : "");
     }
-    if (kind === "retry") return "工具超时，正在重试 " + (data.tool || "");
+    if (kind === "retry") return "工具超时，正在重试 " + nameZh(data.tool);
     if (kind === "clarify") return data.message || "需要补充信息";
-    if (kind === "answer") return data.text || "已给出答复";
+    if (kind === "answer") return "已给出答复";
     if (kind === "brake") return "已达步数上限，安全停止";
     if (kind === "hitl") return "权限变更草案已提交，等待审批";
     if (kind === "checkpoint") return "已保存断点，等待审批后继续";
@@ -83,16 +124,54 @@
     return el;
   }
 
+  function setStatusLabel(status) {
+    if (!status) return;
+    const el = document.querySelector("[data-run-status-label]");
+    if (el) el.textContent = STATUS_LABEL[status] || status;
+    root.setAttribute("data-run-status", status);
+  }
+
+  function waitBanner() {
+    return document.querySelector("[data-run-wait-banner]");
+  }
+
+  function showWaitBanner() {
+    let el = waitBanner();
+    if (!el) {
+      el = document.createElement("p");
+      el.className = "flash-wait";
+      el.setAttribute("data-run-wait-banner", "");
+      el.textContent = "等待管理员审批";
+      if (steps) steps.insertAdjacentElement("afterend", el);
+      else root.appendChild(el);
+    }
+    el.hidden = false;
+  }
+
+  function hideWaitBanner() {
+    const el = waitBanner();
+    if (el) el.hidden = true;
+  }
+
+  function markWaiting() {
+    setStatusLabel("waiting_approval");
+    showWaitBanner();
+    ensureNode("run-waiting-approval", "p", "sr-only").textContent = "waiting_approval";
+  }
+
   function markDone(status) {
+    const doneStatus = status || "completed";
+    setStatusLabel(doneStatus);
+    hideWaitBanner();
     if (cancelBtn) cancelBtn.remove();
     if (!document.querySelector("[data-testid=run-done]")) {
       const done = document.createElement("p");
       done.className = "sr-only";
       done.setAttribute("data-testid", "run-done");
-      done.textContent = status || "completed";
+      done.textContent = doneStatus;
       root.appendChild(done);
     } else {
-      document.querySelector("[data-testid=run-done]").textContent = status || "completed";
+      document.querySelector("[data-testid=run-done]").textContent = doneStatus;
     }
   }
 
@@ -110,14 +189,23 @@
     stream.textContent = text;
   }
 
+  function paintTicketStatus(status) {
+    const statusEl = document.querySelector("[data-testid=ticket-status]");
+    if (statusEl) statusEl.textContent = status;
+    const label = document.querySelector("[data-ticket-status-label]");
+    if (label) {
+      label.textContent = TICKET_STATUS_ZH[status] || status;
+      label.className = "badge tone-" + (TICKET_TONE[status] || "new");
+    }
+  }
+
   async function refreshTicket() {
     if (!ticketId) return;
     const res = await fetch("/api/tickets/" + encodeURIComponent(ticketId), { credentials: "same-origin" });
     if (!res.ok) return;
     const body = await res.json();
     const ticket = body.ticket || {};
-    const statusEl = document.querySelector("[data-testid=ticket-status]");
-    if (statusEl && ticket.status) statusEl.textContent = ticket.status;
+    if (ticket.status) paintTicketStatus(ticket.status);
     const citation = document.querySelector("[data-testid=ticket-citation]");
     if (citation) {
       citation.textContent = ticket.kb_doc_id ? ticket.kb_doc_id + "@" + ticket.kb_version : "—";
@@ -156,13 +244,14 @@
     }
     const kind = data.kind || ev.type;
     appendStep(kind, data, ev.lastEventId || data.id);
+    if (kind === "state" && data.status) setStatusLabel(data.status);
     if (kind === "clarify" || kind === "answer") applyAnswer(Object.assign({ kind: kind }, data));
     if (
       kind === "waiting_approval" ||
       kind === "hitl" ||
       (kind === "state" && data.status === "waiting_approval")
     ) {
-      ensureNode("run-waiting-approval", "p", "sr-only").textContent = "waiting_approval";
+      markWaiting();
     }
   }
 
@@ -177,7 +266,7 @@
       data = {};
     }
     source.close();
-    markDone(data.status || root.getAttribute("data-run-status") || "completed");
+    markDone(data.status || "completed");
     refreshTicket();
     fetch("/api/runs/" + encodeURIComponent(runId), { credentials: "same-origin" })
       .then((res) => (res.ok ? res.json() : null))
