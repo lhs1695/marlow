@@ -8,6 +8,8 @@ from marlow.actions import Action, answer, tool
 from marlow.codes import (
     APPROVAL_REQUIRED,
     MAX_STEPS,
+    MISSING_ARGUMENT,
+    NON_RETRYABLE,
     NOT_ENOUGH_INFO,
     PERM_VIEWER,
     RETRYABLE_TIMEOUT,
@@ -194,6 +196,55 @@ def test_mid_run_events_are_visible_to_another_session(tmp_path: Path) -> None:
     assert seen.get("found") is True
     assert seen.get("status") == RUN_RUNNING
     assert "state" in (seen.get("kinds") or [])
+
+
+def test_get_asset_missing_arg_is_fed_back_once(session) -> None:
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="读取 INC-1001 的资产配置",
+        provider=ScriptProvider(
+            [
+                tool("get_asset"),
+                tool("get_asset", asset_id="ast-grafana-prod"),
+                answer(),
+            ]
+        ),
+    )
+    session.flush()
+    assert run.status == RUN_COMPLETED
+    assert run.outcome_code == "ok"
+    assert run.outcome_code != NON_RETRYABLE
+    assert ticket_status(session, "INC-1001") == STATUS_INVESTIGATING
+    codes = [
+        json.loads(row.payload).get("code")
+        for row in session.scalars(select(RunEvent).where(RunEvent.run_id == run.id, RunEvent.kind == "observation"))
+    ]
+    assert MISSING_ARGUMENT in codes
+    assert codes.count(MISSING_ARGUMENT) == 1
+
+
+def test_get_asset_missing_arg_twice_is_non_retryable(session) -> None:
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="读取 INC-1001 的资产配置",
+        provider=ScriptProvider(
+            [
+                tool("get_asset"),
+                tool("get_asset"),
+            ]
+        ),
+    )
+    session.flush()
+    assert run.status == RUN_FAILED
+    assert run.outcome_code == NON_RETRYABLE
+    assert ticket_status(session, "INC-1001") == STATUS_INVESTIGATING
+    codes = [
+        json.loads(row.payload).get("code")
+        for row in session.scalars(select(RunEvent).where(RunEvent.run_id == run.id, RunEvent.kind == "observation"))
+    ]
+    assert codes.count(MISSING_ARGUMENT) == 2
 
 
 def test_demo_five_segments_fake(capsys, monkeypatch) -> None:

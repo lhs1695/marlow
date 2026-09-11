@@ -199,6 +199,20 @@ class AlwaysVetoClose:
         return
 
 
+def test_close_veto_then_answer_is_not_ok(session) -> None:
+    run = start_run(
+        session,
+        actor_id=L1_ID,
+        user_text="请关 INC-1005",
+        case_id="close_content_mismatch",
+        provider=provider_for_case("close_content_mismatch"),
+    )
+    session.flush()
+    assert run.outcome_code != "ok"
+    assert run.outcome_code == NOT_ENOUGH_INFO
+    assert ticket_status(session, "INC-1005") == STATUS_INVESTIGATING
+
+
 def test_close_content_mismatch_vetoes_and_does_not_resolve(session) -> None:
     comments_before = comment_count(session)
     run = start_run(

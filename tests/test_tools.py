@@ -1,6 +1,7 @@
 from marlow.codes import (
     DECISION_APPROVE,
     KB_MISS,
+    MISSING_ARGUMENT,
     NON_RETRYABLE,
     PERM_EDITOR,
     PERM_VIEWER,
@@ -83,6 +84,15 @@ def test_get_ticket_comments_are_untrusted(session) -> None:
     assert obs.source_trust == SOURCE_TRUST_UNTRUSTED_WEB_CONTENT
     bodies = [c["body"] for c in obs.data["comments"]]
     assert INJECTION_COMMENT in bodies
+
+
+def test_get_asset_missing_asset_id_is_readable_observation(session) -> None:
+    obs = execute_tool(session, "get_asset", actor_id=L1_ID)
+    assert obs.ok is False
+    assert obs.code == MISSING_ARGUMENT
+    assert obs.retryable is True
+    assert "asset_id" in (obs.data or {}).get("missing", [])
+    assert "asset_id" in ((obs.data or {}).get("message") or "")
 
 
 def test_get_asset_returns_config_and_owner(session) -> None:

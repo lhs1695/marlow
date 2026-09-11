@@ -27,6 +27,8 @@ from marlow.codes import (
     MAX_STEPS,
     MAX_STEPS_LIMIT,
     MAX_TOKENS_LIMIT,
+    MISSING_ARGUMENT,
+    NON_RETRYABLE,
     NOT_ENOUGH_INFO,
     OK,
     RETRYABLE_TIMEOUT,
@@ -53,6 +55,7 @@ from marlow.tool_client import ToolClient, resolve_tool_client
 from marlow.tools import TOOL_APPLY_ENTITLEMENT_CHANGE, TOOL_GET_ASSET
 
 TICKET_ID_RE = re.compile(r"\b(INC-\d+|CHG-\d+)\b", re.IGNORECASE)
+CLOSE_INTENT_RE = re.compile(r"关单|请关\s*(?:INC|CHG)-", re.IGNORECASE)
 
 CLARIFY_ANSWER = "请提供工单号（如 INC-1001），当前信息不足，未改工单库。"
 DEGRADE_ANSWER = "资产读取超时，已降级。未编造资产配置或关单。"
@@ -72,6 +75,11 @@ class RunLimits:
     max_steps: int = MAX_STEPS_LIMIT
     max_tokens: int = MAX_TOKENS_LIMIT
     max_cost_cents: int = MAX_COST_CENTS_LIMIT
+
+
+def requests_close(user_text: str) -> bool:
+    """Operator asked to close. Investigate-only text must not match."""
+    return bool(CLOSE_INTENT_RE.search(user_text or ""))
 
 
 def extract_ticket_id(text: str) -> str | None:
@@ -655,6 +663,23 @@ def _agent_loop(
             return run
 
         obs = _call_tool(session, run, actor_id, action, client)
+        if obs.code == MISSING_ARGUMENT:
+            retries = int(verified.get("missing_arg_retries") or 0)
+            if retries < 1:
+                verified["missing_arg_retries"] = retries + 1
+                feedback = StepFeedback(action=action, observation=obs, verified=dict(verified))
+                continue
+            _finish(
+                session,
+                run,
+                agent_session,
+                RUN_FAILED,
+                NON_RETRYABLE,
+                f"工具失败：{obs.code}。",
+                verified,
+            )
+            return run
+
         if obs.retryable and obs.code == RETRYABLE_TIMEOUT:
             _emit(session, run, "retry", code=obs.code, tool=action.name)
             obs = _call_tool(session, run, actor_id, action, client)
@@ -768,6 +793,13 @@ def _finish(
     answer: str,
     verified: dict[str, Any],
 ) -> None:
+    if (
+        code == OK
+        and requests_close(run.user_text or "")
+        and run.ticket_id
+        and ticket_status(session, run.ticket_id) != STATUS_RESOLVED
+    ):
+        code = NOT_ENOUGH_INFO
     run.outcome_code = code
     run.final_answer = answer
     _set_status(session, run, status)
