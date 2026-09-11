@@ -2,7 +2,7 @@
 
 [![fake-eval](https://github.com/lhs1695/marlow/actions/workflows/fake-eval.yml/badge.svg)](https://github.com/lhs1695/marlow/actions/workflows/fake-eval.yml)
 
-Marlow 是一个**内部 IT 工单助手**的个人 PoC。库里是模拟工单、员工和 Grafana 权限，不是某公司的线上 AD / Jira。
+Marlow 是一个内部 IT 工单 **Agent** 的个人 PoC。仓里有模拟服务台：工单、员工、Grafana 权限。一线用自然语言查单、关单；改别人权限必须人批。做成了看工单状态和审计。
 
 你登录之后能看到工单列表、工单详情、对话条；管理员多一页审批队列。在对话里用自然语言办事，例如：
 
@@ -14,13 +14,12 @@ Marlow 是一个**内部 IT 工单助手**的个人 PoC。库里是模拟工单�
 
 这五段也是 `python -m marlow.demo --case 1` … `--case 5`。无 API Key 即可跑（脚本化 Fake）；有 Key 时 `--real` 走真模型，缺 Key 会退回 Fake。
 
-## 和「会聊天的工单 Bot」差在哪
+## 亮点
 
-改权限这件事，模型说「已经加上了」不算数。Web 点按钮、对话调工具、MCP 调同一套工具，写员工权限都进 `src/marlow/gateway.py`：一线提交的进审批，管理员才落库。登录角色来自 Cookie Session 和表里的 `employees.role`，页面上的 `?role=` 改不了。手册检索结果和工单评论当作不可信输入，不让它们变成「系统指令」。
-
-所以评测也查库：默认 `uv run pytest` 看工单状态和审计，不看模型 JSON 像成功。另有 Keyline（Playwright）：工具拦住的提权，在四页上点也绕不过，对照的是同一张审批表、同一套会话角色。
-
-本机实测（2026-09-10）：`uv run pytest` **160 passed**；`uv run pytest evals/keyline` **34 passed**。Keyline 不进默认 `pytest`。
+- **编排自写。** FastAPI + 自写 Run 状态机。写员工权限都进审批网关：一线出草案，管理员才落库。登录角色来自 Cookie Session，页面上的 `?role=` 改不了。手册检索和工单评论标成不可信输入。
+- **提交只入队。** `POST /api/runs` 返回 202；步骤落库即推 SSE，断线用 `Last-Event-ID` 续传。取消落库，在步与步之间生效。
+- **审批是停留态。** Run 真停在 `waiting_approval`；管理员批准后同一 Run、原来的一线角色续跑。
+- **关单规则先过，模型只否决。** 评测查工单库和审计。本机实测（2026-09-11）：`uv run pytest` **165 passed**；同仓 Keyline（Playwright）**16 条 / 34 passed**，证明点页面不能比调工具更特权。Keyline 不进默认 `pytest`。
 
 Python 3.12，包管理用 [uv](https://docs.astral.sh/uv/)。
 
@@ -135,4 +134,4 @@ uv run playwright install chromium
 uv run pytest evals/keyline
 ```
 
-日常主线仍是 `uv run pytest`（只收 `tests/`）。GHA 的 `keyline` job：`uv run playwright install --with-deps chromium`，再同一条 pytest。装不起 Chromium 则 job 失败，不会 skip 当绿。跑完看 `evals/keyline/last_run.md`（gitignore）：`privilege_fail=yes` 的行是提权拦截条。纪律见 `evals/keyline/AGENTS.md`。
+日常主线仍是 `uv run pytest`（只收 `tests/`）。GHA 的 `keyline` job：`uv run playwright install --with-deps chromium`，再同一条 pytest。装不起 Chromium 则 job 失败，不会 skip 当绿。跑完看 `evals/keyline/last_run.md`（gitignore）：`privilege_fail=yes` 的行是提权拦截条。
