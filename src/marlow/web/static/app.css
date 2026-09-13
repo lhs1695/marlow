@@ -373,6 +373,14 @@ textarea, input[type="text"] {
   font-size: 0.88rem;
 }
 
+.chat-task {
+  margin: 0 0 0.45rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .chat-meta {
   font-size: 0.8rem;
   color: var(--muted);

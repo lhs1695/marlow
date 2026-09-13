@@ -11,7 +11,9 @@ from marlow.web.testids import (
     AUDIT_BLOCK,
     CHAT_CLARIFY,
     CHAT_DENY,
+    CHAT_INPUT,
     CHAT_LIVE,
+    CHAT_TASK,
     ENTITLEMENT_PERMISSION,
     LOGIN_ADMIN,
     LOGIN_L1,
@@ -63,6 +65,9 @@ def test_l1_list_has_no_unapproved_grant_success() -> None:
         assert "pill-demo" not in page.text
         assert "HTTP 200" not in page.text
         assert "优先级" in page.text
+        assert "给 Agent 下任务" in page.text
+        assert "对助手说" not in page.text
+        assert "placeholder=\"写工单号和要办的事\"></textarea>" in page.text
 
 
 def test_l1_detail_testids_and_query_role_still_l1() -> None:
@@ -76,6 +81,8 @@ def test_l1_detail_testids_and_query_role_still_l1() -> None:
         assert f'data-testid="{AUDIT_BLOCK}"' in page.text
         assert f'data-testid="{ROLE}">l1</span>' in page.text
         assert f'data-testid="{PAGE_CLAIM}"' in page.text
+        assert "添加评论" in page.text
+        assert "人工评论" not in page.text
         assert "admin" in page.text
         res = client.post(
             "/api/entitlements",
@@ -104,7 +111,11 @@ def test_chat_without_ticket_clarifies_and_does_not_comment() -> None:
             {"text": "Grafana 登录有问题，帮我看看", "next": "/tickets"},
         )
         assert f'data-testid="{CHAT_CLARIFY}"' in page.text
+        assert f'data-testid="{CHAT_TASK}"' in page.text
+        assert "任务：Grafana 登录有问题，帮我看看" in page.text
         assert "工单号" in page.text
+        assert "placeholder=\"写工单号和要办的事\"></textarea>" in page.text
+        assert "对助手说" not in page.text
         with Session(engine) as db:
             assert comment_count(db) == before
 
@@ -215,9 +226,14 @@ def test_chat_keeps_run_id_after_another_get() -> None:
         wait_for_run(client, run_id)
         again = client.get("/tickets")
         assert f'data-testid="{CHAT_CLARIFY}"' in again.text
+        assert f'data-testid="{CHAT_TASK}"' in again.text
+        assert "任务：Grafana 登录有问题，帮我看看" in again.text
+        assert "placeholder=\"写工单号和要办的事\"></textarea>" in again.text
         assert "run_id=" in again.text
         assert "/api/runs/" in again.text
         assert page.status_code == 200
+        assert f'data-testid="{CHAT_TASK}"' in page.text
+        assert f'data-testid="{CHAT_INPUT}"' in page.text
         stale_url = client.get("/tickets", params={"run_id": "missing-run-id"})
         assert f'data-testid="{CHAT_LIVE}"' not in stale_url.text
         kept = client.get("/tickets")
@@ -232,6 +248,7 @@ def test_chat_keeps_run_id_after_another_get() -> None:
         gone = client.get("/tickets")
         assert gone.status_code == 200
         assert f'data-testid="{CHAT_LIVE}"' not in gone.text
+        assert f'data-testid="{CHAT_TASK}"' not in gone.text
         assert f'data-testid="{RUN_CANCEL}"' not in gone.text
         still_gone = client.get("/tickets")
         assert f'data-testid="{CHAT_LIVE}"' not in still_gone.text

@@ -75,7 +75,7 @@ def _page_ctx(request: Request, actor, db=None, **extra):
         "chat_run_id": request.session.get("chat_run_id"),
         "chat_run_status": request.session.get("chat_run_status"),
         "chat_outcome": request.session.get("chat_outcome"),
-        "chat_text": request.session.get("chat_text"),
+        "chat_text": None,
         "chat_run_done": False,
         **extra,
     }
@@ -119,8 +119,7 @@ def _hydrate_chat(request: Request, db, actor, ctx: dict) -> None:
     ctx["chat_run_id"] = run.id
     ctx["chat_run_status"] = run.status
     ctx["chat_outcome"] = run.outcome_code or ""
-    if not ctx.get("chat_text"):
-        ctx["chat_text"] = request.session.get("chat_text") or run.user_text
+    ctx["chat_text"] = run.user_text
     ctx["chat_run_done"] = run.status in TERMINAL_RUN_STATUSES
     if run.status not in TERMINAL_RUN_STATUSES:
         ctx["chat_clarify"] = None
@@ -297,5 +296,4 @@ def register_pages(app: FastAPI) -> None:
         for key in _CHAT_SESSION_KEYS:
             request.session.pop(key, None)
         request.session["chat_run_id"] = run_id
-        request.session["chat_text"] = text
         return RedirectResponse(_with_run_id(nxt, run_id), status_code=303)

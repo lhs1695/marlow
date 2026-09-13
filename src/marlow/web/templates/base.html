@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Marlow{% endblock %}</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/app.css?v=2">
+  <link rel="stylesheet" href="/static/app.css?v=3">
   <script src="/static/app.js?v=2" defer></script>
 </head>
 <body>
@@ -45,6 +45,9 @@
           data-run-status="{{ chat_run_status or '' }}"
           {% if ticket is defined %}data-ticket-id="{{ ticket.id }}"{% endif %}
         >
+          {% if chat_text %}
+          <p class="chat-task" data-testid="chat-task">任务：{{ chat_text }}</p>
+          {% endif %}
           {% if chat_run_id %}
           <p class="chat-meta">
             <span class="run-id" title="{{ chat_run_id }}">run_id=<span class="mono">{{ chat_run_id[:8] }}</span></span>
@@ -88,9 +91,9 @@
       <div class="composer-inner">
         <form method="post" action="/chat">
           <input type="hidden" name="next" value="{{ request.url.path }}">
-          <label class="composer-label" for="chat-input">对助手说</label>
+          <label class="composer-label" for="chat-input">给 Agent 下任务</label>
           <div class="composer-form">
-            <textarea id="chat-input" name="text" data-testid="chat-input" rows="2" placeholder="写工单号和要办的事">{% if chat_text %}{{ chat_text }}{% endif %}</textarea>
+            <textarea id="chat-input" name="text" data-testid="chat-input" rows="2" placeholder="写工单号和要办的事"></textarea>
             <button type="submit" data-testid="chat-submit">发送</button>
           </div>
         </form>

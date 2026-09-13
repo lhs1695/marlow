@@ -48,7 +48,7 @@
     {% endfor %}
   </ul>
   <form method="post" action="/tickets/{{ ticket.id }}/comments" class="comment-form">
-    <label class="composer-label" for="comment-input">人工评论</label>
+    <label class="composer-label" for="comment-input">添加评论</label>
     <div class="composer-form">
       <textarea id="comment-input" name="body" data-testid="comment-input" rows="2" placeholder="添加评论"></textarea>
       <button type="submit" class="ghost" data-testid="comment-submit">提交</button>
