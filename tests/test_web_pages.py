@@ -43,6 +43,12 @@ def test_login_page_has_account_testids() -> None:
         assert f'data-testid="{LOGIN_L1}"' in page.text
         assert f'data-testid="{LOGIN_ADMIN}"' in page.text
         assert "<summary>示例</summary>" in page.text
+        assert "请调查 INC-1002" in page.text
+        assert "请调查 INC-1001 并关单" in page.text
+        assert "工单 CHG-2004 申请给 emp-007 加 Grafana Editor" in page.text
+        assert "帮我看看" not in page.text
+        assert "读取 INC-1005" not in page.text
+        assert "直接改权限" not in page.text
         assert "关单以工单库与审计终态为准" in page.text
         assert "写权限" in page.text
         assert "写 entitlements" not in page.text
