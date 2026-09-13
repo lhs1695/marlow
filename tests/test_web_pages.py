@@ -1,22 +1,24 @@
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from marlow.codes import PERM_EDITOR, PERM_VIEWER, STATUS_RESOLVED, SYSTEM_GRAFANA, UNAUTHORIZED
 from marlow.engine import comment_count, ticket_status
 from marlow.gateway import entitlement_permission
-from marlow.models import TicketComment
+from marlow.models import Approval, Run, RunEvent, TicketComment
 from marlow.web.testids import (
     APPROVAL_APPROVE,
     APPROVAL_QUEUE,
     AUDIT_BLOCK,
     CHAT_CLARIFY,
     CHAT_DENY,
+    CHAT_LIVE,
     ENTITLEMENT_PERMISSION,
     LOGIN_ADMIN,
     LOGIN_L1,
     PAGE_CLAIM,
     REJECT_NOTICE,
     ROLE,
+    RUN_CANCEL,
     TICKET_COMMENTS,
     TICKET_ID,
     TICKET_LIST,
@@ -154,6 +156,9 @@ def test_admin_reject_shows_notice_permission_unchanged() -> None:
         assert queue.status_code == 200
         assert f'data-testid="{APPROVAL_QUEUE}"' in queue.text
         assert f'data-testid="{APPROVAL_APPROVE}"' in queue.text
+        assert "approve path" not in queue.text
+        assert "reject path" not in queue.text
+        assert "IDOR" not in queue.text
         rejected = client.post(
             "/approvals",
             data={
@@ -201,7 +206,7 @@ def test_admin_new_change_ticket_has_no_decision_buttons() -> None:
 
 
 def test_chat_keeps_run_id_after_another_get() -> None:
-    with app_client() as (client, _engine):
+    with app_client() as (client, engine):
         _form_login(client, "l1")
         page, run_id = post_chat_wait(
             client,
@@ -213,6 +218,23 @@ def test_chat_keeps_run_id_after_another_get() -> None:
         assert "run_id=" in again.text
         assert "/api/runs/" in again.text
         assert page.status_code == 200
+        stale_url = client.get("/tickets", params={"run_id": "missing-run-id"})
+        assert f'data-testid="{CHAT_LIVE}"' not in stale_url.text
+        kept = client.get("/tickets")
+        assert f'data-testid="{CHAT_CLARIFY}"' in kept.text
+        with Session(engine) as db:
+            db.execute(delete(RunEvent).where(RunEvent.run_id == run_id))
+            db.execute(update(Approval).where(Approval.run_id == run_id).values(run_id=None))
+            run = db.get(Run, run_id)
+            assert run is not None
+            db.delete(run)
+            db.commit()
+        gone = client.get("/tickets")
+        assert gone.status_code == 200
+        assert f'data-testid="{CHAT_LIVE}"' not in gone.text
+        assert f'data-testid="{RUN_CANCEL}"' not in gone.text
+        still_gone = client.get("/tickets")
+        assert f'data-testid="{CHAT_LIVE}"' not in still_gone.text
 
 
 def test_static_css_is_served() -> None:

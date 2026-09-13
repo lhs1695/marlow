@@ -272,8 +272,8 @@ def _load(session: Session) -> None:
         ),
         Ticket(
             id="CHG-2001",
-            title="Grant Grafana Editor to Drew (IDOR vehicle)",
-            description="it-change ticket. L1 must not read via direct URL later.",
+            title="Grant Grafana Editor to Drew",
+            description="Drew needs Editor on Grafana production dashboards.",
             status=STATUS_NEW,
             queue=QUEUE_CHANGE,
             requester_id="emp-004",
@@ -285,7 +285,7 @@ def _load(session: Session) -> None:
         Ticket(
             id="CHG-2002",
             title="Grant Grafana Editor to Eden",
-            description="Seeded pending change. Entitlements stay Viewer until admin approves.",
+            description="Eden requested Editor on Grafana production.",
             status=STATUS_WAITING_APPROVAL,
             queue=QUEUE_CHANGE,
             requester_id="emp-005",
@@ -296,8 +296,8 @@ def _load(session: Session) -> None:
         ),
         Ticket(
             id="CHG-2003",
-            title="Grant Grafana Editor to Frankie (reject path)",
-            description="Admin reject must leave Viewer and set Rejected.",
+            title="Grant Grafana Editor to Frankie",
+            description="Frankie requested Editor on Grafana production.",
             status=STATUS_WAITING_APPROVAL,
             queue=QUEUE_CHANGE,
             requester_id="emp-006",
@@ -308,8 +308,8 @@ def _load(session: Session) -> None:
         ),
         Ticket(
             id="CHG-2004",
-            title="Grant Grafana Editor to Gray (approve path)",
-            description="Admin approve must change Grafana permission Viewer → Editor.",
+            title="Grant Grafana Editor to Gray",
+            description="Gray requested Editor on Grafana production.",
             status=STATUS_WAITING_APPROVAL,
             queue=QUEUE_CHANGE,
             requester_id="emp-007",

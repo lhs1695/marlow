@@ -84,6 +84,24 @@ def _page_ctx(request: Request, actor, db=None, **extra):
     return ctx
 
 
+def _blank_chat_ctx(ctx: dict) -> None:
+    ctx["chat_clarify"] = None
+    ctx["chat_deny"] = None
+    ctx["chat_answer"] = None
+    ctx["chat_run_id"] = None
+    ctx["chat_run_status"] = None
+    ctx["chat_outcome"] = None
+    ctx["chat_text"] = None
+    ctx["chat_run_done"] = False
+
+
+def _drop_session_chat_if_run(request: Request, run_id: str) -> None:
+    if request.session.get("chat_run_id") != run_id:
+        return
+    for key in _CHAT_SESSION_KEYS:
+        request.session.pop(key, None)
+
+
 def _hydrate_chat(request: Request, db, actor, ctx: dict) -> None:
     """Re-query Run on this request's session. Never use a worker-owned ORM object."""
     run_id = request.query_params.get("run_id") or request.session.get("chat_run_id")
@@ -91,8 +109,12 @@ def _hydrate_chat(request: Request, db, actor, ctx: dict) -> None:
         return
     run = db.get(Run, run_id)
     if run is None:
+        _drop_session_chat_if_run(request, run_id)
+        _blank_chat_ctx(ctx)
         return
     if run.actor_id != actor.id and actor.role != ROLE_ADMIN:
+        _drop_session_chat_if_run(request, run.id)
+        _blank_chat_ctx(ctx)
         return
     ctx["chat_run_id"] = run.id
     ctx["chat_run_status"] = run.status

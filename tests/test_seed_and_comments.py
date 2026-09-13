@@ -23,6 +23,11 @@ def test_seed_counts_and_eval_vehicles(session) -> None:
     assert injected is not None
     assert injected.ticket_id == "INC-1010"
     assert session.get(Ticket, "INC-9999") is None
+    banned = ("IDOR", "approve path", "reject path")
+    for ticket in session.scalars(select(Ticket)):
+        blob = f"{ticket.title}\n{ticket.description or ''}"
+        for token in banned:
+            assert token not in blob, ticket.id
 
 
 def test_l1_comment_allowed_and_marked_untrusted(session) -> None:
